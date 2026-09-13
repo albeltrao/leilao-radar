@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -30,12 +30,12 @@ from radar.ingest.fila import TOPICO_LOTES, FilaMemoria, Mensagem
 from radar.ingest.geocode import GeocodificadorMunicipio
 from radar.ingest.normalizador import normalizar
 from radar.ingest.pipeline import (
+    _serializar_leiloeiro,
+    _serializar_lote,
     executar_coleta,
     persistir_leiloeiro,
     persistir_lote,
     processar_fila,
-    _serializar_leiloeiro,
-    _serializar_lote,
 )
 from radar.models import EventoCalendario, EventoHistorico, Leiloeiro, Lote, Praca
 

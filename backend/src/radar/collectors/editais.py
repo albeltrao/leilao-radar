@@ -18,7 +18,6 @@ from radar.collectors.html import (
     links,
     sopa,
     tabelas_com_colunas,
-    texto,
     valor_por_rotulo,
 )
 from radar.collectors.http import EstruturaInesperada, Fetcher
@@ -27,7 +26,6 @@ from radar.normalizacao import (
     extrair_numero_cnj,
     hash_conteudo,
     limpar_espacos,
-    normalizar_texto,
     parse_data_hora,
 )
 

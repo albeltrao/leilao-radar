@@ -15,7 +15,6 @@ from conftest import carregar_html
 from radar.collectors.base import MetadadosFonte, listar, obter
 from radar.collectors.cadastro import ColetorCadastroLeiloeiros, interpretar_status
 from radar.collectors.editais import ColetorEditaisTribunal, rotulo_comarca
-from radar.collectors.http import EstruturaInesperada
 from radar.collectors.leiloeiros.declarativo import (
     ConectorDeclarativo,
     carregar_perfis,

@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ocr = ["pytesseract>=0.3.10", "pdf2image>=1.17", "Pillow>=10.3"]
-llm = ["anthropic>=0.34"]
+llm = ["anthropic>=1.0"]
 redis = ["redis>=5.0"]
 postgres = ["psycopg[binary]>=3.1"]
 dev = [
@@ -55,4 +55,5 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
-ignore = ["B008", "E501"]
+# C408: dict(a=1) e proposital onde montamos kwargs para repassar com **.
+ignore = ["B008", "E501", "C408"]

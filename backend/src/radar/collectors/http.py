@@ -18,7 +18,7 @@ import time
 import urllib.robotparser
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin, urlparse

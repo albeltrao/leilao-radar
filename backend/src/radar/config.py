@@ -60,7 +60,7 @@ class Settings(BaseSettings):
         description="Abaixo disso a pagina e tratada como digitalizada e vai para OCR.",
     )
     llm_habilitado: bool = False
-    llm_modelo: str = "claude-sonnet-5"
+    llm_modelo: str = "claude-opus-5"
     llm_api_key: str | None = None
     llm_max_caracteres: int = 120_000
 
