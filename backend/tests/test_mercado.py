@@ -221,8 +221,25 @@ def test_analise_e_idempotente(base_mercado):
     assert len(fontes) == len(set(fontes))
 
 
-def test_melhor_analise_escolhe_a_de_maior_confianca(base_mercado):
+def test_melhor_analise_prefere_fonte_de_mercado_ao_laudo(base_mercado):
+    """O laudo tem confianca maior, mas nao carrega informacao de mercado.
+
+    "Lance minimo x avaliacao" da 0% em toda 1a praca e exatamente o percentual
+    do edital na 2a, para qualquer bem. Se o laudo ganhasse o destaque, o
+    desconto exibido nunca refletiria o mercado.
+    """
     lote = _lote(base_mercado)
+    analisar(base_mercado, lote)
+    base_mercado.flush()
+
+    destaque = melhor_analise(lote)
+    assert destaque.fonte is FonteMercado.FIPEZAP
+    laudo = next(a for a in lote.analises if a.fonte is FonteMercado.LAUDO_JUDICIAL)
+    assert laudo.confianca > destaque.confianca  # ganha em confianca, perde em relevancia
+
+
+def test_laudo_e_o_destaque_quando_nao_ha_fonte_de_mercado(base_mercado):
+    lote = _lote(base_mercado, chave="sem-mercado", cidade=None, area_privativa_m2=None)
     analisar(base_mercado, lote)
     base_mercado.flush()
     assert melhor_analise(lote).fonte is FonteMercado.LAUDO_JUDICIAL

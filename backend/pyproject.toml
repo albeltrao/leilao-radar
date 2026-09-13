@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "sqlalchemy>=2.0.30",
     "pydantic>=2.7",
+    "email-validator>=2.1",
     "pydantic-settings>=2.3",
     "httpx>=0.27",
     "beautifulsoup4>=4.12",
@@ -41,7 +42,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-radar = ["data/*.csv", "data/*.yaml", "data/*.json"]
+radar = ["data/*.csv", "data/*.yaml", "data/*.json", "data/editais_demo/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -240,13 +240,32 @@ def _analise_fipezap(
     )
 
 
+# Fontes que trazem informacao de MERCADO. O laudo judicial nao e uma delas: a
+# comparacao "lance minimo x avaliacao" e mecanica -- da 0% na 1a praca e
+# exatamente o percentual do edital na 2a, qualquer que seja o bem. Ela serve de
+# piso quando nao ha mais nada, nunca de destaque quando ha.
+FONTES_DE_MERCADO = frozenset(
+    {FonteMercado.FIPE, FonteMercado.FIPEZAP, FonteMercado.COMPARAVEIS}
+)
+
+
 def melhor_analise(lote: Lote) -> AnaliseMercado | None:
-    """A analise que a UI destaca: maior confianca, desempate pelo desconto."""
+    """A analise que a UI destaca e que alimenta o score.
+
+    Prioridade: fonte de mercado antes de laudo; depois confianca; depois
+    desconto. Sem isso o laudo (confianca fixa de 0,85) ganharia sempre e o
+    desconto exibido seria 0% em toda 1a praca -- escondendo justamente o
+    numero que o usuario abriu o produto para ver.
+    """
     if not lote.analises:
         return None
     return max(
         lote.analises,
-        key=lambda a: (a.confianca, a.desconto_percentual or Decimal(0)),
+        key=lambda a: (
+            a.fonte in FONTES_DE_MERCADO,
+            a.confianca,
+            a.desconto_percentual or Decimal(0),
+        ),
     )
 
 
