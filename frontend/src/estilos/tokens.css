@@ -1,0 +1,138 @@
+/*
+ * Tokens de design do Radar Leilão.
+ *
+ * A paleta foi VALIDADA, não escolhida no olho:
+ *  - a rampa do termômetro de oportunidade passou no validador de paleta
+ *    (uma só matiz, luminosidade monótona, degraus visíveis, ponta clara
+ *    acima de 2:1 contra a superfície) nos dois modos;
+ *  - todos os pares texto/fundo abaixo passam em WCAG AA (>= 4.5:1), inclusive
+ *    os de status, que por isso usam degraus mais escuros no modo claro do que
+ *    o vermelho/amarelo "puro".
+ *
+ * Regra da seção 10 do spec: status nunca é comunicado só por cor. Todo selo
+ * de risco carrega ícone e texto além da cor.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Superfícies e tinta */
+  --plano: #f9f9f7;
+  --superficie: #fcfcfb;
+  --superficie-2: #f2f1ee;
+  --borda: #e1e0d9;
+  --borda-forte: #c3c2b7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-3: #6f6d67;
+
+  /* Marca (ação) — verde-esmeralda saturado, seção 10 */
+  --marca: #0a5c42;
+  --marca-forte: #0b6b4d;
+  --marca-suave: #e6f4ee;
+  --marca-contraste: #ffffff;
+
+  /* Termômetro de oportunidade: rampa ordinal de uma só matiz.
+     Magnitude = distância da superfície. */
+  --faixa-baixa: #6cc4a2;
+  --faixa-moderada: #34a87f;
+  --faixa-boa: #158a63;
+  --faixa-alta: #0a5c42;
+
+  /* Status (risco documental) — sempre com ícone + rótulo */
+  --status-ok: #0a6b0a;
+  --status-atencao: #7a5300;
+  --status-serio: #a3532f;
+  --status-critico: #a32f2f;
+  --status-ok-fundo: #e8f5e8;
+  --status-atencao-fundo: #fdf3da;
+  --status-serio-fundo: #fbeade;
+  --status-critico-fundo: #fbe9e9;
+
+  /* Elevação e movimento */
+  --sombra-1: 0 1px 2px rgba(11, 11, 11, 0.06), 0 1px 3px rgba(11, 11, 11, 0.05);
+  --sombra-2: 0 4px 14px rgba(11, 11, 11, 0.08);
+  --raio: 12px;
+  --raio-2: 999px;
+  --transicao: 160ms cubic-bezier(0.2, 0, 0.2, 1);
+
+  --fonte: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --fonte-num: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+/* O modo escuro é escolhido, não é uma inversão automática. */
+:root[data-tema="escuro"],
+:root:not([data-tema="claro"]) {
+  --dummy: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    color-scheme: dark;
+    --plano: #0d0d0d;
+    --superficie: #1a1a19;
+    --superficie-2: #232322;
+    --borda: #2c2c2a;
+    --borda-forte: #383835;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a199;
+
+    --marca: #6cc4a2;
+    --marca-forte: #8ad4b8;
+    --marca-suave: #12281f;
+    --marca-contraste: #08160f;
+
+    --faixa-baixa: #158a63;
+    --faixa-moderada: #34a87f;
+    --faixa-boa: #6cc4a2;
+    --faixa-alta: #a8e3c8;
+
+    --status-ok: #4fc24f;
+    --status-atencao: #fab219;
+    --status-serio: #ec835a;
+    --status-critico: #f08a8a;
+    --status-ok-fundo: #12240f;
+    --status-atencao-fundo: #2a2107;
+    --status-serio-fundo: #2b1a12;
+    --status-critico-fundo: #2a1414;
+
+    --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --sombra-2: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-tema="escuro"] {
+  color-scheme: dark;
+  --plano: #0d0d0d;
+  --superficie: #1a1a19;
+  --superficie-2: #232322;
+  --borda: #2c2c2a;
+  --borda-forte: #383835;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-3: #a3a199;
+
+  --marca: #6cc4a2;
+  --marca-forte: #8ad4b8;
+  --marca-suave: #12281f;
+  --marca-contraste: #08160f;
+
+  --faixa-baixa: #158a63;
+  --faixa-moderada: #34a87f;
+  --faixa-boa: #6cc4a2;
+  --faixa-alta: #a8e3c8;
+
+  --status-ok: #4fc24f;
+  --status-atencao: #fab219;
+  --status-serio: #ec835a;
+  --status-critico: #f08a8a;
+  --status-ok-fundo: #12240f;
+  --status-atencao-fundo: #2a2107;
+  --status-serio-fundo: #2b1a12;
+  --status-critico-fundo: #2a1414;
+
+  --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sombra-2: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
