@@ -416,3 +416,61 @@ def test_recoleta_apos_reler_do_banco_nao_inventa_remarcacao(sessao_db):
     ).one()
     assert evento.status is StatusEvento.CONFIRMADO
     assert evento.data_hora.tzinfo is not None
+
+
+def test_praca_que_ganha_data_pela_primeira_vez_nao_e_remarcacao(sessao_db):
+    """Regressão: a verificação olhava a data JÁ substituída, nunca a anterior.
+
+    Uma praça publicada sem data e que depois recebe a data era rotulada
+    REMARCADA -- como se tivesse sido adiada, o que nunca aconteceu. O status
+    aparece no detalhe do lote, então isso dizia ao usuário que houve mudança
+    de data onde só houve a primeira publicação.
+    """
+    from radar.enums import StatusPraca
+
+    _gravar(sessao_db, _lote(pracas=[PracaBruta(ordem=1, data_hora=None)]))
+    sessao_db.flush()
+    praca = sessao_db.scalars(select(Praca)).one()
+    assert praca.data_hora is None
+    assert praca.status is StatusPraca.DESIGNADA
+
+    data = datetime(2026, 11, 10, 17, tzinfo=UTC)
+    _gravar(sessao_db, _lote(pracas=[PracaBruta(ordem=1, data_hora=data)]))
+    sessao_db.flush()
+    sessao_db.refresh(praca)
+    assert praca.data_hora == data
+    assert praca.status is StatusPraca.DESIGNADA, "primeira data não é remarcação"
+
+    # Já uma data que MUDA é remarcação de verdade.
+    _gravar(
+        sessao_db,
+        _lote(pracas=[PracaBruta(ordem=1, data_hora=datetime(2026, 12, 1, 17, tzinfo=UTC))]),
+    )
+    sessao_db.flush()
+    sessao_db.refresh(praca)
+    assert praca.status is StatusPraca.REMARCADA
+
+
+def test_lote_da_bahia_infere_tribunal_e_uf(sessao_db):
+    from radar.normalizacao import formatar_cnj
+
+    processo = formatar_cnj("220145", "2023", "8", "05", "0001")
+    lote, _, _, _ = _gravar(
+        sessao_db,
+        _lote(
+            numero_lote="099",
+            fonte_url="https://exemplo.invalid/lote/ba",
+            numero_processo=processo,
+            uf=None,
+            cidade="Salvador",
+            comarca="Salvador",
+            bairro="Pituba",
+            matricula_imovel="55.210",
+            titulo="Apartamento na Pituba, Salvador",
+        ),
+    )
+    sessao_db.flush()
+    assert lote.uf == "BA"
+    assert lote.leilao.tribunal.sigla == "TJBA"
+    # Geocodificado pelo centroide de Salvador.
+    assert lote.latitude == pytest.approx(-12.9777)

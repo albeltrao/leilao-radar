@@ -173,7 +173,12 @@ def test_painel_de_saude_das_fontes(cliente):
 
 def test_facetas_para_montar_filtros(cliente):
     dados = cliente.get("/api/meta/facetas").json()
-    assert set(dados["ufs"]) <= {"AL", "SE", "PE"}
+    # Ancorado na tabela canônica: acrescentar um estado não pode exigir
+    # lembrar de atualizar este teste à mão.
+    from radar.jurisdicoes import UFS
+
+    assert set(dados["ufs"]) <= set(UFS)
+    assert "BA" in dados["ufs"], "a Bahia precisa aparecer nas facetas"
     assert dados["cidades"]
     assert dados["leiloeiros"]
     assert dados["faixa_valores"]["minimo"] is not None

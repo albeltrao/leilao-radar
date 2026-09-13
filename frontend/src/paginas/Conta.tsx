@@ -5,6 +5,7 @@ import { CartaoLote } from "../componentes/CartaoLote";
 import { emDataHora } from "../formatos";
 import { useSessao } from "../sessao";
 import type { Alerta } from "../tipos";
+import { UFS } from "../ufs";
 
 /** Conta: entrar/criar, alertas salvos e favoritos. */
 
@@ -40,7 +41,7 @@ export function Conta() {
     setErro(null);
     try {
       const novo = await api.criarAlerta(nomeAlerta || "Meu alerta", {
-        uf: ["AL", "SE", "PE"],
+        uf: [...UFS],
         desconto_minimo: 20,
       });
       setAlertas((atual) => [...atual, novo]);

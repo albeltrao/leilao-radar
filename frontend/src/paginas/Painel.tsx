@@ -7,6 +7,7 @@ import { Filtros } from "../componentes/Filtros";
 import { emReais } from "../formatos";
 import { useSessao } from "../sessao";
 import type { Facetas, FiltroBusca, PaginaLotes } from "../tipos";
+import { REGIAO_POR_EXTENSO } from "../ufs";
 
 /** Painel principal: filtros, resumo e a grade de cartões. */
 
@@ -114,7 +115,7 @@ export function Painel() {
       <section className="abertura">
         <div className="abertura__texto">
           <h1>
-            Leilões judiciais de <span className="realce">Alagoas, Sergipe e Pernambuco</span>
+            Leilões judiciais de <span className="realce">{REGIAO_POR_EXTENSO}</span>
           </h1>
           <p>
             Editais lidos, valores comparados com referência de mercado e praças no

@@ -654,4 +654,8 @@ class ReferenciaFipe(Base):
     combustivel: Mapped[str | None] = mapped_column(String(40))
     valor: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     mes_referencia: Mapped[str] = mapped_column(String(7))
+    # Procedencia marcada na IMPORTACAO, nunca adivinhada a partir do conteudo:
+    # codigo FIPE real comeca com zero e o mes de amostra e um mes real, entao
+    # qualquer heuristica sobre os valores confunde dado real com demonstracao.
+    demonstracao: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     atualizado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)

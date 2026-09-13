@@ -1,6 +1,6 @@
 # Radar Leilão
 
-Monitoramento de **leilões judiciais de Alagoas, Sergipe e Pernambuco**: coleta
+Monitoramento de **leilões judiciais de Alagoas, Bahia, Pernambuco e Sergipe**: coleta
 os editais das fontes oficiais, lê o que está escrito neles, compara com
 referência de mercado e organiza tudo em um calendário e um painel.
 
@@ -16,7 +16,7 @@ decisão clara**, com honestidade sobre o limite de cada dado.
 
 ## Estado atual, sem maquiagem
 
-O que **funciona e está testado** (188 testes, todos offline):
+O que **funciona e está testado** (207 testes, todos offline):
 
 | Área | Estado |
 |---|---|
@@ -33,13 +33,22 @@ O que **funciona e está testado** (188 testes, todos offline):
 
 O que **ainda não foi validado**:
 
-- **19 dos 20 conectores nunca rodaram contra o site real.** O ambiente onde
-  este código foi escrito não tem saída de rede para `tjal.jus.br`,
-  `tjse.jus.br`, `portal.tjpe.jus.br`, `juceal.al.gov.br`, `jucese.se.gov.br`
-  nem `portal.jucepe.pe.gov.br`. Os parsers foram exercitados contra fixtures
-  HTML sintéticas, modeladas na estrutura documentada de cada página — não
-  contra capturas reais. Cada fonte carrega `validado_ao_vivo: false` e a coleta
+- **23 dos 24 conectores nunca rodaram contra o site real.** O ambiente onde
+  este código foi escrito não tem saída de rede para os portais dos tribunais
+  nem das juntas comerciais. Os parsers foram exercitados contra fixtures HTML
+  sintéticas, modeladas na estrutura documentada de cada página — não contra
+  capturas reais. Cada fonte carrega `validado_ao_vivo: false` e a coleta
   automática **pula** essas fontes até que alguém rode a validação (abaixo).
+
+- **O cadastro de leiloeiros está vazio.** Os nomes e as matrículas dos
+  leiloeiros públicos oficiais são dados de pessoas reais e só entram no
+  sistema vindos da fonte oficial — não há lista embutida no repositório.
+  Um comando popula tudo (ver "Cadastro de leiloeiros" abaixo).
+
+- **As URLs do TJBA e da JUCEB são candidatas, não confirmadas.** A
+  especificação original cobria AL, SE e PE e trazia os caminhos exatos; para a
+  Bahia eles foram inferidos do domínio do tribunal e da junta, e estão
+  marcados como `URL CANDIDATA` na descrição da fonte.
 - **Os dados de mercado do repositório são amostras de demonstração**, não a
   tabela FIPE nem o boletim FipeZap reais. Enquanto estiverem em uso, toda
   análise sai com aviso em caixa alta e confiança reduzida à metade.
@@ -66,6 +75,26 @@ Para desenvolver o frontend com recarga automática, rode a API e o Vite em
 paralelo (`radar servir` e `npm run dev` — o Vite já faz proxy de `/api`).
 
 ---
+
+## Cadastro de leiloeiros
+
+Os leiloeiros públicos oficiais são pessoas reais, com matrícula real numa junta
+comercial. Por isso **não há lista embutida no repositório**: inventar nomes
+criaria registro falso sobre gente identificável, e o cadastro é justamente o
+que gera a lista de sites a monitorar e a credencial exibida em cada lote.
+
+O caminho é um comando, a partir de um ambiente com saída de rede:
+
+```bash
+radar leiloeiros coletar                  # JUCEAL, JUCEB, JUCEPE, JUCESE + corregedorias
+radar leiloeiros listar --uf BA           # confere o que entrou
+radar leiloeiros sugerir-perfis --uf BA   # gera o YAML dos conectores de cada site
+```
+
+O último imprime perfis prontos para colar em
+`backend/src/radar/data/perfis_leiloeiros.yaml` — é assim que o cadastro mestre
+(quem pode leiloar) vira conector de coleta (o que está sendo leiloado), como
+manda a seção 4.3 da especificação.
 
 ## Validando um conector contra o site real
 
@@ -101,8 +130,9 @@ adicionar um leiloeiro é editar YAML, não escrever código.
 ```
   fontes oficiais           ingestão                 análise              produto
 ┌──────────────────┐   ┌────────────────┐   ┌──────────────────┐   ┌──────────────┐
-│ TJAL TJSE TJPE   │   │ fila           │   │ parser de edital │   │ API REST     │
-│ JUCEAL/SE/PE     │──▶│ normalização   │──▶│ + LLM opcional   │──▶│ painel React │
+│ TJAL TJBA TJPE   │   │ fila           │   │ parser de edital │   │ API REST     │
+│ TJSE             │   │                │   │                  │   │              │
+│ JUCEAL/EB/PE/SE  │──▶│ normalização   │──▶│ + LLM opcional   │──▶│ painel React │
 │ sites leiloeiros │   │ deduplicação   │   │ FIPE / FipeZap   │   │ calendário   │
 │ DataJud (CNJ)    │   │ geocodificação │   │ score explicável │   │ alertas      │
 └──────────────────┘   └────────────────┘   └──────────────────┘   └──────────────┘
@@ -171,7 +201,7 @@ Extras opcionais: `pip install -e "backend[ocr,llm,redis,postgres]"`.
 ## Testes
 
 ```bash
-.venv/bin/python -m pytest backend/tests -q    # 188 testes, offline
+.venv/bin/python -m pytest backend/tests -q    # 207 testes, offline
 .venv/bin/ruff check backend/src backend/tests
 cd frontend && npm run build                   # typecheck + build
 ```

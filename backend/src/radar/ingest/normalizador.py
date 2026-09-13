@@ -19,6 +19,8 @@ from decimal import Decimal
 
 from radar.collectors.dto import LoteBruto, PracaBruta
 from radar.ingest.geocode import Geocodificador, GeocodificadorNulo
+from radar.jurisdicoes import TRIBUNAL_POR_UF, UFS
+from radar.jurisdicoes import UF_POR_TRIBUNAL as _UF_POR_TRIBUNAL
 from radar.normalizacao import (
     extrair_numero_cnj,
     hash_conteudo,
@@ -32,8 +34,9 @@ from radar.normalizacao import (
 
 logger = logging.getLogger(__name__)
 
-UF_POR_TRIBUNAL = {"TJAL": "AL", "TJSE": "SE", "TJPE": "PE"}
-_UF_VALIDAS = frozenset(UF_POR_TRIBUNAL.values())
+# Reexportado por compatibilidade: quem ja importava daqui continua funcionando.
+UF_POR_TRIBUNAL = _UF_POR_TRIBUNAL
+_UF_VALIDAS = frozenset(UFS)
 
 
 @dataclass(slots=True)
@@ -146,7 +149,7 @@ def normalizar(
     tribunal = bruto.tribunal_sigla or (tribunal_do_cnj(processo) if processo_valido else None)
     uf = _inferir_uf(bruto, tribunal)
     if tribunal is None and uf:
-        tribunal = {v: k for k, v in UF_POR_TRIBUNAL.items()}.get(uf)
+        tribunal = TRIBUNAL_POR_UF.get(uf)
 
     # LGPD (secao 11): nada de CPF, nada de placa inteira.
     descricao = remover_cpf(limpar_espacos(bruto.descricao))

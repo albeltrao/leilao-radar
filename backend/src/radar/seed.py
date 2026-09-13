@@ -58,6 +58,8 @@ LEILOEIROS = [
          uf="SE", site_url="https://leiloeiro-se-exemplo.invalid"),
     dict(nome="José Almeida Leiloeiro Oficial", matricula="31/2016",
          junta=JuntaComercial.JUCEPE, uf="PE", site_url="https://leiloes-pe-exemplo.invalid"),
+    dict(nome="Helena Barbosa Leiloeira Oficial", matricula="18/2017",
+         junta=JuntaComercial.JUCEB, uf="BA", site_url="https://leiloes-ba-exemplo.invalid"),
 ]
 
 
@@ -191,6 +193,37 @@ def _lotes() -> list[LoteBruto]:
             pracas=[
                 PracaBruta(1, _daqui(1, 16), valor_minimo=Decimal("390000.00")),
                 PracaBruta(2, _daqui(15, 16), Decimal("50"), Decimal("195000.00")),
+            ],
+        ),
+        LoteBruto(
+            fonte_slug=FONTE, fonte_url="https://exemplo.invalid/lote/9",
+            titulo="Apartamento na Pituba, Salvador/BA — 95 m²",
+            numero_lote="009", tipo_bem=TipoBem.IMOVEL,
+            descricao="Apartamento com área privativa de 95,00 m², desocupado, 3 quartos.",
+            valor_avaliacao=Decimal("690000.00"),
+            numero_processo=cnj("220145", "2023", "05", "0001"),
+            comarca="Salvador", vara="8ª Vara Cível", cidade="Salvador", bairro="Pituba",
+            uf="BA", endereco="Rua Exemplo da Pituba, 400", matricula_imovel="55.210",
+            area_total_m2=Decimal("95.00"), ocupado=False,
+            leiloeiro_nome="Helena Barbosa Leiloeira Oficial", comissao_percentual=Decimal("5"),
+            pracas=[
+                PracaBruta(1, _daqui(4, 10), valor_minimo=Decimal("690000.00")),
+                PracaBruta(2, _daqui(18, 10), Decimal("50"), Decimal("345000.00")),
+            ],
+        ),
+        LoteBruto(
+            fonte_slug=FONTE, fonte_url="https://exemplo.invalid/lote/10",
+            titulo="Chevrolet Onix 1.0 2018 — Feira de Santana/BA",
+            numero_lote="010", tipo_bem=TipoBem.VEICULO,
+            descricao="Veículo com documentação regular, chave única.",
+            valor_avaliacao=Decimal("47000.00"),
+            numero_processo=cnj("660033", "2024", "05", "0274"),
+            comarca="Feira de Santana", cidade="Feira de Santana", uf="BA",
+            marca="CHEVROLET", modelo="ONIX 1.0 FLEX", ano_fabricacao=2018, ano_modelo=2018,
+            leiloeiro_nome="Helena Barbosa Leiloeira Oficial", comissao_percentual=Decimal("5"),
+            pracas=[
+                PracaBruta(1, _daqui(11, 14), valor_minimo=Decimal("47000.00")),
+                PracaBruta(2, _daqui(25, 14), Decimal("50"), Decimal("23500.00")),
             ],
         ),
         LoteBruto(

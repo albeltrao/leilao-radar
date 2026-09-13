@@ -13,10 +13,17 @@ from radar.config import get_settings
 from radar.db import criar_schema
 from radar.db import sessao as abrir_sessao
 
-app = typer.Typer(help="Radar Leilão — leilões judiciais de AL, SE e PE.", no_args_is_help=True)
+app = typer.Typer(
+    help="Radar Leilão — leilões judiciais de AL, BA, PE e SE.", no_args_is_help=True
+)
 fontes_app = typer.Typer(help="Fontes de coleta e sua saúde.", no_args_is_help=True)
+leiloeiros_app = typer.Typer(
+    help="Cadastro mestre de leiloeiros (juntas comerciais e corregedorias).",
+    no_args_is_help=True,
+)
 mercado_app = typer.Typer(help="Referências de valor de mercado.", no_args_is_help=True)
 app.add_typer(fontes_app, name="fontes")
+app.add_typer(leiloeiros_app, name="leiloeiros")
 app.add_typer(mercado_app, name="mercado")
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -275,6 +282,167 @@ def servir(
 
     criar_schema()
     uvicorn.run("radar.api.app:app", host=host, port=porta, reload=recarregar)
+
+
+# ---------------------------------------------------------------------------
+# Cadastro mestre de leiloeiros (secao 4.2)
+# ---------------------------------------------------------------------------
+
+
+@leiloeiros_app.command("coletar")
+def leiloeiros_coletar(
+    uf: Annotated[str | None, typer.Option(help="Limita a uma UF (AL, BA, PE, SE)")] = None,
+    incluir_nao_validados: Annotated[
+        bool, typer.Option(help="Inclui fontes ainda não validadas ao vivo")
+    ] = False,
+) -> None:
+    """Popula o cadastro mestre a partir das juntas comerciais e corregedorias.
+
+    É este o comando que traz os leiloeiros REAIS para dentro do sistema. Ele
+    precisa rodar de um ambiente com saída de rede para os portais oficiais --
+    os nomes e as matrículas vêm de lá, nunca de dados embutidos no repositório.
+    """
+    from sqlalchemy import func, select
+
+    from radar.collectors.base import listar
+    from radar.collectors.http import criar_fetcher
+    from radar.enums import TipoFonte
+    from radar.ingest.fila import criar_fila
+    from radar.ingest.pipeline import executar_coleta, processar_fila
+    from radar.models import Leiloeiro
+
+    fontes = [
+        c
+        for c in listar(uf=uf.upper() if uf else None)
+        if c.meta.tipo in (TipoFonte.JUNTA_COMERCIAL, TipoFonte.TRIBUNAL)
+    ]
+    if not fontes:
+        raise typer.BadParameter(f"nenhuma fonte de cadastro para UF={uf}")
+
+    criar_schema()
+    fila = criar_fila()
+    with abrir_sessao() as sessao, criar_fetcher() as fetcher:
+        antes = sessao.scalar(select(func.count()).select_from(Leiloeiro)) or 0
+        for conector in fontes:
+            execucao = executar_coleta(
+                conector, fetcher, fila, sessao, incluir_nao_validados=incluir_nao_validados
+            )
+            cor = {
+                "SUCESSO": typer.colors.GREEN,
+                "PARCIAL": typer.colors.YELLOW,
+            }.get(str(execucao.status), typer.colors.RED)
+            typer.secho(
+                f"{execucao.fonte_slug:32s} {execucao.status:12s} "
+                f"itens={execucao.itens_encontrados:<4} {execucao.erro or ''}",
+                fg=cor,
+            )
+        stats = processar_fila(fila, sessao)
+        depois = sessao.scalar(select(func.count()).select_from(Leiloeiro)) or 0
+
+    eco(f"\ncadastro mestre: {antes} -> {depois} leiloeiros ({stats.novos} novos)")
+    if depois == antes == 0:
+        typer.secho(
+            "\nNenhum leiloeiro entrou. As fontes de cadastro ainda não foram validadas\n"
+            "ao vivo: rode `radar fontes validar --fonte <slug>` para conferir a URL e o\n"
+            "parser de cada uma, e só então marque validado_ao_vivo: true.",
+            fg=typer.colors.YELLOW,
+        )
+
+
+@leiloeiros_app.command("listar")
+def leiloeiros_listar(
+    uf: Annotated[str | None, typer.Option(help="Filtra por UF")] = None,
+    com_site: Annotated[bool, typer.Option(help="Só os que têm site cadastrado")] = False,
+) -> None:
+    """Lista o cadastro mestre já coletado."""
+    from sqlalchemy import select
+
+    from radar.models import Leiloeiro
+
+    with abrir_sessao() as sessao:
+        consulta = select(Leiloeiro).order_by(Leiloeiro.uf, Leiloeiro.nome)
+        if uf:
+            consulta = consulta.where(Leiloeiro.uf == uf.upper())
+        registros = list(sessao.scalars(consulta))
+        if com_site:
+            registros = [r for r in registros if r.site_url]
+
+        if not registros:
+            typer.secho(
+                "Cadastro vazio. Rode `radar leiloeiros coletar` de um ambiente com "
+                "rede para os portais oficiais.",
+                fg=typer.colors.YELLOW,
+            )
+            return
+        for r in registros:
+            credenciais = ", ".join(sorted((r.credenciamentos or {}).keys())) or "—"
+            eco(
+                f"{r.uf}  {r.nome[:44]:44s} mat.{(r.matricula or '—'):10s} "
+                f"{str(r.junta or '—'):8s} {r.status:12s} cred.{credenciais:14s} "
+                f"{r.site_url or ''}"
+            )
+        eco(f"\ntotal: {len(registros)}")
+
+
+@leiloeiros_app.command("sugerir-perfis")
+def leiloeiros_sugerir_perfis(
+    uf: Annotated[str | None, typer.Option(help="Filtra por UF")] = None,
+) -> None:
+    """Gera perfis YAML para leiloeiros com site que ainda não têm conector.
+
+    Fecha o ciclo da seção 4.3: o cadastro mestre diz QUEM pode leiloar e onde
+    fica o site; este comando transforma isso no esqueleto do conector. Cole a
+    saída em data/perfis_leiloeiros.yaml, valide e marque validado_ao_vivo.
+    """
+    from urllib.parse import urlparse
+
+    from sqlalchemy import select
+
+    from radar.collectors.leiloeiros.declarativo import carregar_perfis
+    from radar.models import Leiloeiro
+    from radar.normalizacao import slugify
+
+    dominios_com_perfil = {
+        urlparse(p.base_url).netloc.replace("www.", "")
+        for p in carregar_perfis()
+        if p.base_url and p.base_url != "PREENCHER"
+    }
+
+    with abrir_sessao() as sessao:
+        consulta = select(Leiloeiro).where(Leiloeiro.site_url.isnot(None))
+        if uf:
+            consulta = consulta.where(Leiloeiro.uf == uf.upper())
+        candidatos = [
+            r
+            for r in sessao.scalars(consulta.order_by(Leiloeiro.uf, Leiloeiro.nome))
+            if urlparse(r.site_url).netloc.replace("www.", "") not in dominios_com_perfil
+        ]
+
+    if not candidatos:
+        typer.secho(
+            "Nenhum leiloeiro com site sem perfil. Se o cadastro está vazio, rode "
+            "`radar leiloeiros coletar` primeiro.",
+            fg=typer.colors.YELLOW,
+        )
+        return
+
+    eco("# Cole em backend/src/radar/data/perfis_leiloeiros.yaml, sob `perfis:`.")
+    eco("# Depois: radar fontes validar --fonte <slug>, congele a fixture, teste,")
+    eco("# e só então marque validado_ao_vivo: true.\n")
+    for r in candidatos:
+        base = r.site_url.rstrip("/")
+        eco("  - <<: *plataforma_padrao")
+        eco(f"    slug: {slugify(r.nome)}")
+        eco(f'    nome: "{r.nome}"')
+        eco(f"    uf: {r.uf}")
+        eco(f'    base_url: "{base}"')
+        eco(f'    urls: ["{base}"]   # CONFIRMAR o caminho da listagem de lotes')
+        eco(f"    leiloeiro_nome: \"{r.nome}\"")
+        if r.matricula:
+            eco(f'    leiloeiro_matricula: "{r.matricula}"')
+        eco("    validado_ao_vivo: false")
+        eco("")
+    eco(f"# {len(candidatos)} perfil(is) sugerido(s).")
 
 
 if __name__ == "__main__":  # pragma: no cover

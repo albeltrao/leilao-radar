@@ -87,9 +87,8 @@ class ProvedorEspelhoLocal(ProvedorFipe):
 
     LIMIAR_SIMILARIDADE = 0.34
 
-    def __init__(self, sessao: Session, demonstracao: bool = False) -> None:
+    def __init__(self, sessao: Session) -> None:
         self.sessao = sessao
-        self.demonstracao = demonstracao
 
     def consultar(self, marca, modelo, ano_modelo):  # noqa: D102
         if not modelo:
@@ -126,7 +125,9 @@ class ProvedorEspelhoLocal(ProvedorFipe):
             mes_referencia=melhor.mes_referencia,
             combustivel=melhor.combustivel,
             similaridade=round(melhor_score, 3),
-            demonstracao=self.demonstracao,
+            # Por linha: um banco com espelho real e amostra ao mesmo tempo
+            # responde conforme a referencia que de fato casou.
+            demonstracao=bool(melhor.demonstracao),
         )
 
 
@@ -175,16 +176,7 @@ def criar_provedor(sessao: Session, settings: Settings | None = None) -> Provedo
     settings = settings or get_settings()
     if settings.fipe_provider == "fipe_api_br":  # pragma: no cover
         return ProvedorHttp(settings.fipe_api_base, settings.user_agent)
-    demonstracao = _espelho_e_demonstracao(sessao)
-    return ProvedorEspelhoLocal(sessao, demonstracao=demonstracao)
-
-
-def _espelho_e_demonstracao(sessao: Session) -> bool:
-    """True enquanto o banco so tiver os dados de amostra deste repositorio."""
-    total = sessao.scalar(select(ReferenciaFipe).limit(1))
-    if total is None:
-        return True
-    return total.mes_referencia == "2026-09" and total.codigo_fipe.startswith("0")
+    return ProvedorEspelhoLocal(sessao)
 
 
 def carregar_espelho(
@@ -211,8 +203,12 @@ def carregar_espelho(
                     ReferenciaFipe.mes_referencia == chave[2],
                 )
             )
+            demonstracao = str(registro.get("demonstracao", "")).strip().lower() in {
+                "1", "sim", "true", "demonstracao", "demonstração"
+            }
             if existente is not None:
                 existente.valor = Decimal(registro["valor"])
+                existente.demonstracao = demonstracao
                 continue
             sessao.add(
                 ReferenciaFipe(
@@ -224,6 +220,7 @@ def carregar_espelho(
                     combustivel=registro.get("combustivel"),
                     valor=Decimal(registro["valor"]),
                     mes_referencia=registro["mes_referencia"],
+                    demonstracao=demonstracao,
                 )
             )
             importados += 1

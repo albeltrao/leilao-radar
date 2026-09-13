@@ -266,7 +266,11 @@ def tribunal_do_cnj(numero: str | None) -> str | None:
     segmento, tr = digitos[13], digitos[14:16]
     if segmento != "8":
         return None
-    return {"02": "TJAL", "25": "TJSE", "17": "TJPE"}.get(tr)
+    # Import local: jurisdicoes nao depende deste modulo, mas manter o import no
+    # topo criaria acoplamento desnecessario para uma unica funcao.
+    from radar.jurisdicoes import tribunal_por_codigo_tr  # noqa: PLC0415
+
+    return tribunal_por_codigo_tr(tr)
 
 
 # ---------------------------------------------------------------------------

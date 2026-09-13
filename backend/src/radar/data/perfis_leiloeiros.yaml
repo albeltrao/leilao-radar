@@ -194,3 +194,14 @@ perfis:
     urls: ["PREENCHER"]
     observacao: >-
       Vaga a preencher com leiloeiro credenciado em PE (JUCEPE + CGJ/TJPE).
+
+  - <<: *plataforma_padrao
+    slug: regional-ba-1
+    nome: "Leiloeiro regional BA (a definir)"
+    uf: BA
+    base_url: "PREENCHER"
+    urls: ["PREENCHER"]
+    observacao: >-
+      Vaga a preencher com leiloeiro credenciado na Bahia (JUCEB + CGJ/TJBA).
+      Rode `radar leiloeiros sugerir-perfis --uf BA` depois de coletar a JUCEB:
+      o comando lista os leiloeiros com site cadastrado que ainda nao tem perfil.

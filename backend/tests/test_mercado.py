@@ -363,3 +363,58 @@ def test_recalcular_todos(base_mercado):
         _lote(base_mercado, chave=f"l{i}")
     base_mercado.flush()
     assert motor_score.recalcular_todos(base_mercado) >= 3
+
+
+def test_procedencia_do_espelho_fipe_e_marcada_na_importacao(sessao_db, tmp_path):
+    """Regressão: a heurística olhava o conteúdo (mês e prefixo do código) e
+    classificava dado REAL como demonstração -- o aviso em caixa alta ficava
+    ligado para sempre e a confiança era cortada pela metade sem motivo."""
+    from radar.market.fipe import ARQUIVO_ESPELHO, carregar_espelho, criar_provedor
+
+    carregar_espelho(sessao_db, ARQUIVO_ESPELHO)
+    sessao_db.flush()
+    amostra = criar_provedor(sessao_db).consultar("FIAT", "UNO MILLE ECONOMY", 2015)
+    assert amostra.demonstracao is True
+
+    real = tmp_path / "fipe_real.csv"
+    real.write_text(
+        "codigo_fipe,marca,modelo,ano_modelo,combustivel,valor,mes_referencia\n"
+        "001004-9,FIAT,UNO MILLE ECONOMY 1.0 FIRE FLEX 4P,2015,Flex,26900.00,2026-09\n",
+        encoding="utf-8",
+    )
+    carregar_espelho(sessao_db, real)
+    sessao_db.flush()
+
+    atual = criar_provedor(sessao_db).consultar("FIAT", "UNO MILLE ECONOMY", 2015)
+    assert atual.valor == Decimal("26900.00")
+    assert atual.demonstracao is False, "dado real não pode sair marcado como demonstração"
+
+
+def test_analise_de_dado_real_nao_traz_aviso_de_demonstracao(base_mercado, tmp_path):
+    from radar.market.fipe import carregar_espelho
+
+    real = tmp_path / "fipe_real.csv"
+    real.write_text(
+        "codigo_fipe,marca,modelo,ano_modelo,combustivel,valor,mes_referencia\n"
+        "001004-9,FIAT,UNO MILLE ECONOMY 1.0 FIRE FLEX 4P,2015,Flex,26900.00,2026-09\n",
+        encoding="utf-8",
+    )
+    carregar_espelho(base_mercado, real)
+    base_mercado.flush()
+
+    lote = _lote(
+        base_mercado, chave="veic-real", titulo="Fiat Uno 2015", tipo_bem=TipoBem.VEICULO,
+        marca="FIAT", modelo="UNO MILLE ECONOMY", ano_modelo=2015, area_privativa_m2=None,
+        valor_avaliacao=Decimal("28500.00"), valor_minimo_primeira=Decimal("28500.00"),
+        valor_minimo_segunda=Decimal("14250.00"),
+        pracas=[(1, datetime(2026, 9, 1, tzinfo=UTC)), (2, datetime(2026, 11, 24, 17, tzinfo=UTC))],
+    )
+    fipe = {a.fonte: a for a in analisar(base_mercado, lote)}[FonteMercado.FIPE]
+    assert not any("DEMONSTRAÇÃO" in a for a in fipe.avisos)
+    assert fipe.confianca > 0.5
+
+
+def test_fipezap_cobre_a_bahia(base_mercado):
+    indice = fipezap.consultar(base_mercado, "BA", "Salvador", "Pituba")
+    assert indice.valor_m2 == Decimal("8900.00")
+    assert indice.precisao == "BAIRRO"
