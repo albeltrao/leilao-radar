@@ -454,6 +454,11 @@ class ScoreOportunidade(Base, CarimboTempo):
     )
     total: Mapped[float] = mapped_column(default=0.0, index=True)
     faixa: Mapped[str] = mapped_column(String(20), default="INDEFINIDA")
+    # Denormalizado da melhor AnaliseMercado no momento do calculo: filtrar e
+    # ordenar por desconto e a operacao mais comum da listagem, e faze-la por
+    # subconsulta em analise_mercado sairia caro em toda pagina.
+    desconto_destaque: Mapped[float | None] = mapped_column(index=True)
+    fonte_destaque: Mapped[str | None] = mapped_column(String(20))
     # Lista de componentes {chave, rotulo, pontos, maximo, explicacao}: e o que a
     # UI mostra no tooltip do termometro. Secao 8: nunca um numero sem explicacao.
     componentes: Mapped[list | None] = mapped_column(JSON, default=list)

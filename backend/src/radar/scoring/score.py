@@ -295,6 +295,13 @@ def calcular(
         sessao.add(score)
     score.total = total
     score.faixa = _faixa(total)
+    destaque = melhor_analise(lote)
+    score.desconto_destaque = (
+        float(destaque.desconto_percentual)
+        if destaque is not None and destaque.desconto_percentual is not None
+        else None
+    )
+    score.fonte_destaque = str(destaque.fonte) if destaque is not None else None
     score.componentes = [c.para_dict() for c in componentes]
     score.versao = VERSAO
     score.calculado_em = agora or datetime.now(UTC)
