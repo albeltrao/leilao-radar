@@ -1,0 +1,29 @@
+# INDICE FIPEZAP - AMOSTRA DE DEMONSTRACAO, NAO SAO OS VALORES PUBLICADOS.
+#
+# O FipeZap e publicado como boletim mensal em PDF
+# (downloads.fipe.org.br/indices/fipezap), nao como API. O fluxo correto e:
+#   1. baixar o boletim do mes;
+#   2. extrair a tabela de R$/m2 por cidade/bairro;
+#   3. radar mercado importar-fipezap <arquivo.csv>
+#
+# Enquanto estes valores de amostra estiverem em uso, toda comparacao de imovel
+# sai marcada como demonstracao, com confianca reduzida e aviso visivel na UI.
+# O indice mede valor de ANUNCIO por m2 de area util -- nao e preco de venda
+# fechado, e a metodologia devolvida pela API diz isso.
+uf,cidade,bairro,valor_m2_venda,mes_referencia,observacao
+AL,Maceió,,7200.00,2026-08,demonstração
+AL,Maceió,Farol,8100.00,2026-08,demonstração
+AL,Maceió,Ponta Verde,11400.00,2026-08,demonstração
+AL,Maceió,Jatiúca,10200.00,2026-08,demonstração
+AL,Arapiraca,,3900.00,2026-08,demonstração
+SE,Aracaju,,6800.00,2026-08,demonstração
+SE,Aracaju,Jardins,9300.00,2026-08,demonstração
+SE,Aracaju,Atalaia,7600.00,2026-08,demonstração
+SE,Nossa Senhora do Socorro,,3400.00,2026-08,demonstração
+PE,Recife,,8300.00,2026-08,demonstração
+PE,Recife,Boa Viagem,9900.00,2026-08,demonstração
+PE,Recife,Espinheiro,8700.00,2026-08,demonstração
+PE,Olinda,,5600.00,2026-08,demonstração
+PE,Jaboatão dos Guararapes,,4800.00,2026-08,demonstração
+PE,Caruaru,,4100.00,2026-08,demonstração
+PE,Petrolina,,4300.00,2026-08,demonstração
