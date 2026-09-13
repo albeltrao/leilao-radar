@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { emDataHora } from "../formatos";
 import type { Evento } from "../tipos";
+import { UFS } from "../ufs";
 
 /** Calendário consolidado de praças e prazos (seção 9). */
 
@@ -71,7 +72,7 @@ export function Calendario() {
       <div className="filtros__linha filtros__linha--grupos">
         <fieldset className="grupo">
           <legend>Estado</legend>
-          {["AL", "SE", "PE"].map((sigla) => (
+          {UFS.map((sigla) => (
             <button
               key={sigla}
               type="button"

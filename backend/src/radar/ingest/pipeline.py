@@ -534,8 +534,14 @@ def _sincronizar_pracas(sessao: Session, leilao: Leilao, pracas: list[PracaBruta
             )
             continue
         if bruta.data_hora and atual.data_hora != bruta.data_hora:
+            # A verificacao tem de olhar a data ANTERIOR, nao a nova. Atribuir
+            # primeiro e testar depois fazia `atual.data_hora` ser sempre
+            # verdadeiro, e uma praca que apenas ganhou data pela primeira vez
+            # (de None para uma data publicada) era rotulada REMARCADA -- como
+            # se tivesse sido adiada, o que nunca aconteceu.
+            tinha_data = atual.data_hora is not None
             atual.data_hora = bruta.data_hora
-            atual.status = StatusPraca.REMARCADA if atual.data_hora else StatusPraca.DESIGNADA
+            atual.status = StatusPraca.REMARCADA if tinha_data else StatusPraca.DESIGNADA
         if bruta.percentual_minimo and atual.percentual_minimo is None:
             atual.percentual_minimo = bruta.percentual_minimo
 

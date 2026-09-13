@@ -9,6 +9,7 @@ import { Comparar } from "./paginas/Comparar";
 import { Onboarding } from "./paginas/Onboarding";
 import { Fontes } from "./paginas/Fontes";
 import { Conta } from "./paginas/Conta";
+import { REGIAO_POR_EXTENSO, REGIAO_SIGLAS } from "./ufs";
 
 const LINKS = [
   { para: "/", rotulo: "Lotes", fim: true },
@@ -31,7 +32,7 @@ function Cabecalho() {
           <span className="marca__texto">
             Radar<strong>Leilão</strong>
           </span>
-          <span className="marca__regiao">AL · SE · PE</span>
+          <span className="marca__regiao">{REGIAO_SIGLAS}</span>
         </NavLink>
 
         <nav className="navegacao" aria-label="Seções">
@@ -69,8 +70,9 @@ function Rodape() {
           consulte o documento original e um advogado antes de participar do leilão.
         </p>
         <p className="rodape__fontes">
-          Fontes: TJAL, TJSE, TJPE, JUCEAL, JUCESE, JUCEPE, DataJud/CNJ, Tabela FIPE e
-          índice FipeZap. Cada dado exibido traz a sua origem e a data da coleta.
+          Fontes: tribunais de justiça e juntas comerciais de {REGIAO_POR_EXTENSO},
+          DataJud/CNJ, Tabela FIPE e índice FipeZap. Cada dado exibido traz a sua
+          origem e a data da coleta.
         </p>
       </div>
     </footer>

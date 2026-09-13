@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { MapaLotes } from "../componentes/MapaLotes";
 import type { GeoFeicao } from "../tipos";
+import { UFS } from "../ufs";
 
 export function PaginaMapa() {
   const [feicoes, setFeicoes] = useState<GeoFeicao[]>([]);
@@ -29,7 +30,7 @@ export function PaginaMapa() {
 
       <fieldset className="grupo">
         <legend>Estado</legend>
-        {["AL", "SE", "PE"].map((sigla) => (
+        {UFS.map((sigla) => (
           <button
             key={sigla}
             type="button"

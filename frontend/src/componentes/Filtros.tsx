@@ -1,5 +1,6 @@
 import type { Facetas, FiltroBusca } from "../tipos";
 import { emReais } from "../formatos";
+import { UFS } from "../ufs";
 
 /**
  * Barra de filtros. Fica numa linha acima dos resultados, como manda a
@@ -70,7 +71,7 @@ export function Filtros({
       <div className="filtros__linha filtros__linha--grupos">
         <fieldset className="grupo">
           <legend>Estado</legend>
-          {(facetas?.ufs ?? ["AL", "SE", "PE"]).map((uf) => (
+          {(facetas?.ufs ?? [...UFS]).map((uf) => (
             <button
               key={uf}
               type="button"

@@ -2,7 +2,7 @@
 
 ## O que este projeto é
 
-Monitor de leilões judiciais de AL, SE e PE. Backend Python (FastAPI +
+Monitor de leilões judiciais de AL, BA, PE e SE. Backend Python (FastAPI +
 SQLAlchemy), frontend React/Vite. Leia o `README.md` primeiro — em especial a
 seção "Estado atual, sem maquiagem".
 

@@ -45,7 +45,7 @@ def escapar(texto: str | None) -> str:
         return ""
     return (
         texto.replace("\\", "\\\\")
-        .replace(";", "\;")
+        .replace(";", "\\;")
         .replace(",", "\\,")
         .replace("\r\n", "\\n")
         .replace("\n", "\\n")

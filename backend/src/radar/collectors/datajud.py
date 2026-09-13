@@ -25,12 +25,13 @@ from radar.collectors.dto import LoteBruto, ResultadoConector
 from radar.collectors.http import ErroColeta, Fetcher
 from radar.config import Settings, get_settings
 from radar.enums import TipoFonte
+from radar.jurisdicoes import INDICES_DATAJUD, SIGLAS, UF_POR_TRIBUNAL
 from radar.normalizacao import extrair_numero_cnj, limpar_espacos, normalizar_texto
 
 logger = logging.getLogger(__name__)
 
-# Indices por tribunal na API publica.
-INDICES = {"TJAL": "api_publica_tjal", "TJSE": "api_publica_tjse", "TJPE": "api_publica_tjpe"}
+# Indices por tribunal na API publica, derivados da tabela de jurisdicoes.
+INDICES = dict(INDICES_DATAJUD)
 
 # O DataJud nao expoe um filtro "tem leilao designado". Casamos pelo NOME do
 # movimento da Tabela Processual Unificada, que e texto estavel o bastante.
@@ -190,7 +191,7 @@ META = MetadadosFonte(
     url_alvo="https://api-publica.datajud.cnj.jus.br",
     periodicidade_horas=24,
     descricao=(
-        "API publica do CNJ. Descobre processos de AL/SE/PE com movimentacao de "
+        "API publica do CNJ. Descobre processos das UFs cobertas com movimentacao de "
         "leilao/hasta/praca, antes mesmo de o edital sair no site do leiloeiro."
     ),
 )
@@ -199,7 +200,7 @@ META = MetadadosFonte(
 class ConectorDataJud(Conector):
     meta = META
 
-    def __init__(self, tribunais: tuple[str, ...] = ("TJAL", "TJSE", "TJPE")) -> None:
+    def __init__(self, tribunais: tuple[str, ...] = SIGLAS) -> None:
         self.tribunais = tribunais
 
     def coletar(self, fetcher: Fetcher) -> ResultadoConector:
@@ -228,7 +229,7 @@ class ConectorDataJud(Conector):
         ate la o registro fica visivel apenas como sinal de calendario.
         """
         ultimo = processo.ultimo_movimento or {}
-        uf = {"TJAL": "AL", "TJSE": "SE", "TJPE": "PE"}[tribunal]
+        uf = UF_POR_TRIBUNAL[tribunal]
         return LoteBruto(
             fonte_slug=self.slug,
             fonte_url=f"{self.meta.url_alvo}/{INDICES[tribunal]}",

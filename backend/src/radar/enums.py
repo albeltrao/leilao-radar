@@ -10,9 +10,13 @@ from enum import StrEnum
 
 
 class UF(StrEnum):
+    """UFs cobertas. A tabela canonica com tribunal e codigo CNJ esta em
+    radar.jurisdicoes -- acrescentar um estado e acrescentar uma linha la."""
+
     AL = "AL"
-    SE = "SE"
+    BA = "BA"
     PE = "PE"
+    SE = "SE"
 
 
 class TipoBem(StrEnum):
@@ -96,8 +100,9 @@ class StatusLeiloeiro(StrEnum):
 
 class JuntaComercial(StrEnum):
     JUCEAL = "JUCEAL"
-    JUCESE = "JUCESE"
+    JUCEB = "JUCEB"
     JUCEPE = "JUCEPE"
+    JUCESE = "JUCESE"
 
 
 class TipoFonte(StrEnum):
