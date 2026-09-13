@@ -1,4 +1,4 @@
-"""Sanidade do código-fonte.
+r"""Sanidade do código-fonte.
 
 Guarda contra uma classe de bug que já apareceu duas vezes neste repositório:
 sequência de escape inválida em string Python. Hoje o interpretador é leniente e
@@ -9,6 +9,10 @@ e a exportação .ics para de funcionar inteira.
 
 Vale a pena como teste porque o defeito é invisível no resultado e só aparece
 num aviso perdido no log do CI.
+
+ARMADILHA: este docstring leva prefixo `r` de proposito. Ele cita a sequencia
+invalida como exemplo, e o teste varre os proprios arquivos de teste -- sem o
+prefixo r o modulo se acusa e o teste falha por causa do texto que o explica.
 """
 
 from __future__ import annotations
