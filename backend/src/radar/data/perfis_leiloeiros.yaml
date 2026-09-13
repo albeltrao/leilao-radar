@@ -1,0 +1,196 @@
+# Perfis de conectores de site de leiloeiro (secao 4.3 do spec).
+#
+# ATENCAO -- estado de validacao
+# -----------------------------
+# Todos os perfis abaixo estao com `validado_ao_vivo: false`. Os seletores foram
+# escritos de forma defensiva (casam por SUBSTRING de classe, ex. [class*=card],
+# em vez de caminhos CSS rigidos), mas nenhum foi exercitado contra o HTML real
+# do site -- o ambiente onde este codigo foi escrito nao tem saida de rede para
+# esses dominios.
+#
+# Antes de ligar qualquer perfil em producao:
+#   1. radar fontes validar --fonte <slug>    (baixa a pagina e mostra o que saiu)
+#   2. salve o HTML em backend/tests/fixtures/html/<slug>.html
+#   3. escreva o teste de regressao correspondente (ver test_declarativo.py)
+#   4. marque validado_ao_vivo: true
+#
+# O painel de saude das fontes mostra o selo "nao validado" enquanto isso, e o
+# comando `radar coletar --todas` pula esses perfis a menos que venha --incluir-nao-validados.
+#
+# `base_url` das plataformas nacionais: confira o dominio antes de usar. A lista
+# real de leiloeiros ATIVOS em AL/SE/PE sai do cruzamento com o cadastro mestre
+# (JUCEAL/JUCESE/JUCEPE + corregedorias), como manda a secao 4.3 -- estes perfis
+# sao o ponto de partida, nao a lista definitiva.
+
+perfis:
+  # --------------------------------------------------------------------------
+  # Perfil de referencia: este SIM e validado, contra uma fixture sintetica.
+  # Serve de documentacao viva do formato e de teste de regressao da engine.
+  # --------------------------------------------------------------------------
+  - slug: demo-leiloes-nordeste
+    nome: "Demo Leiloes Nordeste (fixture)"
+    uf: AL
+    base_url: "https://exemplo.invalid"
+    urls: ["https://exemplo.invalid/leiloes"]
+    validado_ao_vivo: true
+    periodicidade_horas: 24
+    observacao: >-
+      Perfil sintetico usado pelos testes da engine declarativa. Nao aponta para
+      site real (dominio .invalid, reservado pela RFC 2606). Nunca sera coletado
+      em producao.
+    leiloeiro_nome: "Leiloeiro Demonstracao"
+    seletor_item: "article.lote"
+    seguir_detalhe: false
+    campos:
+      titulo: "h2.titulo"
+      numero_lote:
+        seletor: ".numero"
+        regex: "lote\\s*(\\d+)"
+      url_detalhe: {seletor: "a.detalhe", atributo: "href", tipo: url}
+      url_edital: {seletor: "a.edital", atributo: "href", tipo: url}
+      fotos: {seletor: "img.foto", atributo: "src", tipo: url, multiplo: true}
+      valor_avaliacao:
+        seletor: ".avaliacao"
+        regex: "R\\$\\s*([\\d.,]+)"
+        tipo: moeda
+      valor_minimo_primeira:
+        seletor: ".praca-1 .minimo"
+        tipo: moeda
+      valor_minimo_segunda:
+        seletor: ".praca-2 .minimo"
+        tipo: moeda
+      data_primeira_praca: {seletor: ".praca-1 .data", tipo: data_hora}
+      data_segunda_praca: {seletor: ".praca-2 .data", tipo: data_hora}
+      numero_processo: {seletor: ".processo", tipo: processo}
+      comarca:
+        seletor: ".processo"
+        regex: "comarca\\s+de\\s+([\\w\\sÀ-ÿ-]+?)(?:\\s*[|/]|$)"
+      cidade: ".cidade"
+      bairro: ".bairro"
+      endereco: ".endereco"
+      status: ".situacao"
+      comissao_percentual: {seletor: ".comissao", tipo: percentual}
+
+  # --------------------------------------------------------------------------
+  # Plataformas nacionais citadas na secao 4.1 do spec.
+  # Seletores genericos por substring de classe -- estrategia deliberada para
+  # sobreviver a redesigns. TODOS pendentes de validacao ao vivo.
+  # --------------------------------------------------------------------------
+  - &plataforma_padrao
+    slug: superbid
+    nome: "Superbid"
+    uf: PE
+    base_url: "https://www.superbid.net"
+    urls: ["https://www.superbid.net/categorias/imoveis"]
+    paginacao: "?pagina={n}"
+    max_paginas: 5
+    validado_ao_vivo: false
+    observacao: >-
+      CONFIRMAR url de listagem e dominio. Filtrar por UF (AL/SE/PE) no proprio
+      site quando houver parametro de busca por estado -- evita baixar o Brasil inteiro.
+    seguir_detalhe: true
+    seletor_item: "[class*=card], [class*=Card], [class*=lote], li[class*=item]"
+    campos:
+      titulo: "h2, h3, [class*=titulo], [class*=title]"
+      url_detalhe: {seletor: "a[href]", atributo: "href", tipo: url}
+      fotos: {seletor: "img", atributo: "src", tipo: url, multiplo: true}
+      valor_avaliacao:
+        regex: "(?:avalia(?:ç|c)(?:ão|ao)|valor de avalia\\w+)[^R]{0,40}R\\$\\s*([\\d.,]+)"
+        tipo: moeda
+      valor_minimo_primeira:
+        regex: "(?:1(?:ª|a)\\s*pra(?:ç|c)a|primeiro leil(?:ã|a)o)[^R]{0,60}R\\$\\s*([\\d.,]+)"
+        tipo: moeda
+      valor_minimo_segunda:
+        regex: "(?:2(?:ª|a)\\s*pra(?:ç|c)a|segundo leil(?:ã|a)o)[^R]{0,60}R\\$\\s*([\\d.,]+)"
+        tipo: moeda
+      data_primeira_praca:
+        regex: "1(?:ª|a)\\s*pra(?:ç|c)a[^\\d]{0,30}(\\d{1,2}/\\d{1,2}/\\d{2,4}[^\\n]{0,20})"
+        tipo: data_hora
+      data_segunda_praca:
+        regex: "2(?:ª|a)\\s*pra(?:ç|c)a[^\\d]{0,30}(\\d{1,2}/\\d{1,2}/\\d{2,4}[^\\n]{0,20})"
+        tipo: data_hora
+      numero_processo: {tipo: processo, regex: "(\\d{7}-?\\d{2}\\.?\\d{4}\\.?\\d\\.?\\d{2}\\.?\\d{4})"}
+      status: "[class*=status], [class*=situacao], [class*=badge]"
+    campos_detalhe:
+      descricao: "[class*=descricao], [class*=description], [class*=detalhe]"
+      url_edital: {seletor: "a[href$='.pdf']", atributo: "href", tipo: url}
+      endereco: "[class*=endereco], [class*=localizacao], [class*=address]"
+      comissao_percentual: {tipo: percentual, regex: "comiss(?:ã|a)o[^%]{0,40}(\\d{1,2}(?:[.,]\\d)?)\\s*%"}
+      matricula_imovel: {regex: "matr(?:í|i)cula\\s*(?:n?[o°º.]?\\s*)?([\\d.-]{3,20})"}
+      area_total_m2: {tipo: area, regex: "(?:área|area)\\s*(?:total|do terreno)?[^\\d]{0,15}([\\d.,]+\\s*m)"}
+
+  - <<: *plataforma_padrao
+    slug: sodre-santoro
+    nome: "Sodre Santoro"
+    base_url: "https://www.sodresantoro.com.br"
+    urls: ["https://www.sodresantoro.com.br/imoveis", "https://www.sodresantoro.com.br/veiculos"]
+
+  - <<: *plataforma_padrao
+    slug: mega-leiloes
+    nome: "Mega Leiloes"
+    base_url: "https://www.megaleiloes.com.br"
+    urls: ["https://www.megaleiloes.com.br/imoveis", "https://www.megaleiloes.com.br/veiculos"]
+
+  - <<: *plataforma_padrao
+    slug: zuk-leiloes
+    nome: "Zuk Leiloes"
+    base_url: "https://www.zukerman.com.br"
+    urls: ["https://www.zukerman.com.br/leiloes"]
+
+  - <<: *plataforma_padrao
+    slug: vip-leiloes
+    nome: "VIP Leiloes"
+    base_url: "https://www.vipleiloes.com.br"
+    urls: ["https://www.vipleiloes.com.br/lotes"]
+
+  - <<: *plataforma_padrao
+    slug: daf-leiloes
+    nome: "DAF Leiloes"
+    base_url: "https://www.dafleiloes.com.br"
+    urls: ["https://www.dafleiloes.com.br/leiloes"]
+
+  - <<: *plataforma_padrao
+    slug: freitas-leiloeiro
+    nome: "Freitas Leiloeiro"
+    base_url: "https://www.freitasleiloeiro.com.br"
+    urls: ["https://www.freitasleiloeiro.com.br/leiloes"]
+
+  - <<: *plataforma_padrao
+    slug: leje-leiloes
+    nome: "LEJE Leiloes"
+    base_url: "https://www.leje.com.br"
+    urls: ["https://www.leje.com.br/leiloes"]
+
+  # --------------------------------------------------------------------------
+  # Vagas para leiloeiros REGIONAIS. Preencher com o que sair do cadastro mestre
+  # (JUCEAL/JUCESE/JUCEPE + corregedorias). O comando
+  #   radar leiloeiros sugerir-perfis --uf AL
+  # lista os leiloeiros com site cadastrado que ainda nao tem perfil aqui.
+  # --------------------------------------------------------------------------
+  - <<: *plataforma_padrao
+    slug: regional-al-1
+    nome: "Leiloeiro regional AL (a definir)"
+    uf: AL
+    base_url: "PREENCHER"
+    urls: ["PREENCHER"]
+    observacao: >-
+      Vaga a preencher com leiloeiro credenciado em AL (JUCEAL + CGJ/TJAL).
+      O conector fica desabilitado enquanto base_url for PREENCHER.
+
+  - <<: *plataforma_padrao
+    slug: regional-se-1
+    nome: "Leiloeiro regional SE (a definir)"
+    uf: SE
+    base_url: "PREENCHER"
+    urls: ["PREENCHER"]
+    observacao: >-
+      Vaga a preencher com leiloeiro credenciado em SE (JUCESE + TJSE).
+
+  - <<: *plataforma_padrao
+    slug: regional-pe-1
+    nome: "Leiloeiro regional PE (a definir)"
+    uf: PE
+    base_url: "PREENCHER"
+    urls: ["PREENCHER"]
+    observacao: >-
+      Vaga a preencher com leiloeiro credenciado em PE (JUCEPE + CGJ/TJPE).
