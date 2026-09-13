@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from enum import StrEnum
 
 from sqlalchemy import (
     JSON,
@@ -27,6 +28,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from radar.enums import (
     CanalAlerta,
@@ -51,12 +53,74 @@ def agora() -> datetime:
     return datetime.now(UTC)
 
 
+class UtcDateTime(TypeDecorator):
+    """DateTime que SEMPRE entra e sai em UTC com tzinfo preenchido.
+
+    O SQLite nao tem tipo com fuso: ele devolveria datetimes ingenuos, e comparar
+    ingenuo com consciente faz ``!=`` dar True para valores identicos. Isso
+    marcaria uma remarcacao falsa a cada coleta e dispararia alerta indevido
+    para quem tem lembrete. Postgres tambem se beneficia da normalizacao.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    def process_result_value(self, value: datetime | None, dialect):
+        if value is None:
+            return None
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+class EnumTexto(TypeDecorator):
+    """Guarda o *valor* do enum como texto e devolve o membro do enum.
+
+    Com ``mapped_column(String(20))`` cru, o banco devolvia a string pura: a
+    anotacao ``Mapped[StatusEvento]`` mentia e comparacoes com ``is`` falhavam
+    silenciosamente. Texto (e nao ENUM nativo) porque adicionar um valor novo em
+    ENUM nativo do Postgres exige migracao com ALTER TYPE.
+    """
+
+    impl = String
+    cache_ok = True
+
+    def __init__(self, enum_cls, length: int = 30) -> None:
+        self._enum = enum_cls
+        super().__init__(length)
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return str(value.value) if isinstance(value, StrEnum) else str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        try:
+            return self._enum(value)
+        except ValueError:
+            # Valor gravado por uma versao mais nova do codigo: nao derruba a
+            # leitura, devolve o texto cru e deixa a aplicacao decidir.
+            return value
+
+
 class Base(DeclarativeBase):
-    type_annotation_map = {dict: JSON, list: JSON, Decimal: Numeric(14, 2)}
+    type_annotation_map = {
+        dict: JSON,
+        list: JSON,
+        Decimal: Numeric(14, 2),
+        datetime: UtcDateTime,
+    }
 
 
 class CarimboTempo:
-    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
+    criado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=agora, onupdate=agora
     )
@@ -105,7 +169,7 @@ class Leiloeiro(Base, CarimboTempo):
     nome: Mapped[str] = mapped_column(String(200), index=True)
     nome_normalizado: Mapped[str] = mapped_column(String(200), index=True)
     matricula: Mapped[str | None] = mapped_column(String(60))
-    junta: Mapped[JuntaComercial | None] = mapped_column(String(10))
+    junta: Mapped[JuntaComercial | None] = mapped_column(EnumTexto(JuntaComercial))
     uf: Mapped[str] = mapped_column(String(2), index=True)
     status: Mapped[StatusLeiloeiro] = mapped_column(
         String(20), default=StatusLeiloeiro.DESCONHECIDO
@@ -121,7 +185,7 @@ class Leiloeiro(Base, CarimboTempo):
     )
     fonte_slug: Mapped[str | None] = mapped_column(String(80))
     fonte_url: Mapped[str | None] = mapped_column(String(500))
-    verificado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verificado_em: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
     leiloes: Mapped[list[Leilao]] = relationship(back_populates="leiloeiro")
 
@@ -142,7 +206,7 @@ class Processo(Base, CarimboTempo):
     # CPF/CNPJ de pessoa fisica nem endereco residencial das partes.
     partes_resumo: Mapped[str | None] = mapped_column(String(400))
     datajud_movimentacoes: Mapped[list | None] = mapped_column(JSON)
-    datajud_atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    datajud_atualizado_em: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
     tribunal: Mapped[Tribunal | None] = relationship()
     comarca: Mapped[Comarca | None] = relationship()
@@ -169,10 +233,11 @@ class Leilao(Base, CarimboTempo):
     comitente: Mapped[str | None] = mapped_column(String(200))
     fonte_slug: Mapped[str] = mapped_column(String(80), index=True)
     fonte_url: Mapped[str | None] = mapped_column(String(700))
-    coletado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
+    coletado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
 
     leiloeiro: Mapped[Leiloeiro | None] = relationship(back_populates="leiloes")
     processo: Mapped[Processo | None] = relationship(back_populates="leiloes")
+    tribunal: Mapped[Tribunal | None] = relationship()
     pracas: Mapped[list[Praca]] = relationship(
         back_populates="leilao", cascade="all, delete-orphan", order_by="Praca.ordem"
     )
@@ -188,11 +253,11 @@ class Praca(Base, CarimboTempo):
     id: Mapped[int] = mapped_column(primary_key=True)
     leilao_id: Mapped[int] = mapped_column(ForeignKey("leilao.id", ondelete="CASCADE"))
     ordem: Mapped[int] = mapped_column(Integer)  # 1 = primeira praca, 2 = segunda
-    data_hora: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    data_hora: Mapped[datetime | None] = mapped_column(UtcDateTime, index=True)
     percentual_minimo: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2), doc="Percentual do valor de avaliacao aceito nesta praca (ex.: 50.00)."
     )
-    status: Mapped[StatusPraca] = mapped_column(String(20), default=StatusPraca.DESIGNADA)
+    status: Mapped[StatusPraca] = mapped_column(EnumTexto(StatusPraca), default=StatusPraca.DESIGNADA)
 
     leilao: Mapped[Leilao] = relationship(back_populates="pracas")
 
@@ -211,10 +276,13 @@ class Lote(Base, CarimboTempo):
     leilao_id: Mapped[int] = mapped_column(ForeignKey("leilao.id", ondelete="CASCADE"))
     numero_lote: Mapped[str | None] = mapped_column(String(40))
 
-    tipo_bem: Mapped[TipoBem] = mapped_column(String(20), index=True, default=TipoBem.OUTRO)
+    # Denormalizado do Processo: a deduplicacao e os filtros da API consultam
+    # por processo o tempo todo, e um join por linha sairia caro.
+    numero_processo: Mapped[str | None] = mapped_column(String(25), index=True)
+    tipo_bem: Mapped[TipoBem] = mapped_column(EnumTexto(TipoBem), index=True, default=TipoBem.OUTRO)
     titulo: Mapped[str] = mapped_column(String(300))
     descricao: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[StatusLote] = mapped_column(String(20), default=StatusLote.ABERTO, index=True)
+    status: Mapped[StatusLote] = mapped_column(EnumTexto(StatusLote), default=StatusLote.ABERTO, index=True)
 
     valor_avaliacao: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     valor_minimo_primeira: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
@@ -264,8 +332,8 @@ class Lote(Base, CarimboTempo):
         JSON, default=list, doc="Outras URLs onde o mesmo lote foi visto (dedup, secao 5)."
     )
     conteudo_hash: Mapped[str | None] = mapped_column(String(64))
-    coletado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
-    visto_por_ultimo_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
+    coletado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
+    visto_por_ultimo_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
 
     leilao: Mapped[Leilao] = relationship(back_populates="lotes")
     documentos: Mapped[list[Documento]] = relationship(
@@ -295,14 +363,14 @@ class Documento(Base, CarimboTempo):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     lote_id: Mapped[int] = mapped_column(ForeignKey("lote.id", ondelete="CASCADE"))
-    tipo: Mapped[TipoDocumento] = mapped_column(String(20), default=TipoDocumento.EDITAL)
+    tipo: Mapped[TipoDocumento] = mapped_column(EnumTexto(TipoDocumento), default=TipoDocumento.EDITAL)
     url: Mapped[str | None] = mapped_column(String(700))
     caminho_local: Mapped[str | None] = mapped_column(String(500))
     sha256: Mapped[str | None] = mapped_column(String(64), index=True)
     paginas: Mapped[int | None] = mapped_column(Integer)
     texto: Mapped[str | None] = mapped_column(Text)
-    origem_texto: Mapped[OrigemTexto | None] = mapped_column(String(20))
-    extraido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    origem_texto: Mapped[OrigemTexto | None] = mapped_column(EnumTexto(OrigemTexto))
+    extraido_em: Mapped[datetime | None] = mapped_column(UtcDateTime)
     prompt_versao: Mapped[str | None] = mapped_column(
         String(40), doc="Versao do prompt de extracao usada (secao 12: prompts versionados)."
     )
@@ -336,10 +404,10 @@ class CampoExtraido(Base, CarimboTempo):
     nome: Mapped[str] = mapped_column(String(80), index=True)
     valor_texto: Mapped[str | None] = mapped_column(Text)
     valor_numerico: Mapped[Decimal | None] = mapped_column(Numeric(16, 4))
-    valor_data: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    valor_data: Mapped[datetime | None] = mapped_column(UtcDateTime)
     valor_booleano: Mapped[bool | None] = mapped_column(Boolean)
     confianca: Mapped[float] = mapped_column(default=0.0)
-    metodo: Mapped[MetodoExtracao] = mapped_column(String(20), default=MetodoExtracao.REGRA)
+    metodo: Mapped[MetodoExtracao] = mapped_column(EnumTexto(MetodoExtracao), default=MetodoExtracao.REGRA)
     evidencia: Mapped[str | None] = mapped_column(
         Text, doc="Trecho literal do documento que sustenta o valor."
     )
@@ -360,19 +428,19 @@ class AnaliseMercado(Base, CarimboTempo):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     lote_id: Mapped[int] = mapped_column(ForeignKey("lote.id", ondelete="CASCADE"))
-    fonte: Mapped[FonteMercado] = mapped_column(String(20))
+    fonte: Mapped[FonteMercado] = mapped_column(EnumTexto(FonteMercado))
     valor_referencia: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     valor_comparado: Mapped[Decimal | None] = mapped_column(
         Numeric(14, 2), doc="Lance minimo da praca vigente usado no calculo."
     )
     praca_base: Mapped[int | None] = mapped_column(Integer)
     desconto_percentual: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
-    data_referencia_fonte: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    data_referencia_fonte: Mapped[datetime | None] = mapped_column(UtcDateTime)
     metodologia: Mapped[str] = mapped_column(Text)
     fonte_url: Mapped[str | None] = mapped_column(String(500))
     avisos: Mapped[list | None] = mapped_column(JSON, default=list)
     confianca: Mapped[float] = mapped_column(default=0.0)
-    calculado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
+    calculado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
 
     lote: Mapped[Lote] = relationship(back_populates="analises")
 
@@ -390,7 +458,7 @@ class ScoreOportunidade(Base, CarimboTempo):
     # UI mostra no tooltip do termometro. Secao 8: nunca um numero sem explicacao.
     componentes: Mapped[list | None] = mapped_column(JSON, default=list)
     versao: Mapped[str] = mapped_column(String(20), default="1.0")
-    calculado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
+    calculado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
 
     lote: Mapped[Lote] = relationship(back_populates="score")
 
@@ -410,10 +478,10 @@ class EventoCalendario(Base, CarimboTempo):
     id: Mapped[int] = mapped_column(primary_key=True)
     lote_id: Mapped[int] = mapped_column(ForeignKey("lote.id", ondelete="CASCADE"))
     praca_id: Mapped[int | None] = mapped_column(ForeignKey("praca.id", ondelete="SET NULL"))
-    tipo: Mapped[TipoEvento] = mapped_column(String(30), index=True)
+    tipo: Mapped[TipoEvento] = mapped_column(EnumTexto(TipoEvento), index=True)
     titulo: Mapped[str] = mapped_column(String(300))
-    data_hora: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-    status: Mapped[StatusEvento] = mapped_column(String(20), default=StatusEvento.CONFIRMADO)
+    data_hora: Mapped[datetime] = mapped_column(UtcDateTime, index=True)
+    status: Mapped[StatusEvento] = mapped_column(EnumTexto(StatusEvento), default=StatusEvento.CONFIRMADO)
     estimado: Mapped[bool] = mapped_column(
         Boolean, default=False, doc="True quando a data foi inferida, nao lida do edital."
     )
@@ -434,12 +502,12 @@ class EventoHistorico(Base):
     evento_id: Mapped[int] = mapped_column(
         ForeignKey("evento_calendario.id", ondelete="CASCADE")
     )
-    data_hora_anterior: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    data_hora_nova: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    data_hora_anterior: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    data_hora_nova: Mapped[datetime | None] = mapped_column(UtcDateTime)
     status_anterior: Mapped[str | None] = mapped_column(String(20))
     status_novo: Mapped[str | None] = mapped_column(String(20))
     motivo: Mapped[str | None] = mapped_column(String(300))
-    registrado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
+    registrado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
 
     evento: Mapped[EventoCalendario] = relationship(back_populates="historico")
 
@@ -472,8 +540,8 @@ class Sessao(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="CASCADE"))
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
-    expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
+    expira_em: Mapped[datetime] = mapped_column(UtcDateTime)
 
     usuario: Mapped[Usuario] = relationship()
 
@@ -485,9 +553,9 @@ class Alerta(Base, CarimboTempo):
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="CASCADE"))
     nome: Mapped[str] = mapped_column(String(160))
     criterios: Mapped[dict] = mapped_column(JSON, default=dict)
-    canal: Mapped[CanalAlerta] = mapped_column(String(20), default=CanalAlerta.EMAIL)
+    canal: Mapped[CanalAlerta] = mapped_column(EnumTexto(CanalAlerta), default=CanalAlerta.EMAIL)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
-    ultimo_envio_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ultimo_envio_em: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
     usuario: Mapped[Usuario] = relationship(back_populates="alertas")
     envios: Mapped[list[AlertaEnvio]] = relationship(
@@ -504,7 +572,7 @@ class AlertaEnvio(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     alerta_id: Mapped[int] = mapped_column(ForeignKey("alerta.id", ondelete="CASCADE"))
     lote_id: Mapped[int] = mapped_column(ForeignKey("lote.id", ondelete="CASCADE"))
-    enviado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
+    enviado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
 
     alerta: Mapped[Alerta] = relationship(back_populates="envios")
 
@@ -516,7 +584,7 @@ class Favorito(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="CASCADE"))
     lote_id: Mapped[int] = mapped_column(ForeignKey("lote.id", ondelete="CASCADE"))
-    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
+    criado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
 
     usuario: Mapped[Usuario] = relationship(back_populates="favoritos")
     lote: Mapped[Lote] = relationship()
@@ -533,10 +601,10 @@ class ExecucaoColeta(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     fonte_slug: Mapped[str] = mapped_column(String(80), index=True)
-    tipo_fonte: Mapped[TipoFonte] = mapped_column(String(20))
-    status: Mapped[StatusColeta] = mapped_column(String(20), default=StatusColeta.EM_ANDAMENTO)
-    iniciado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
-    finalizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    tipo_fonte: Mapped[TipoFonte] = mapped_column(EnumTexto(TipoFonte))
+    status: Mapped[StatusColeta] = mapped_column(EnumTexto(StatusColeta), default=StatusColeta.EM_ANDAMENTO)
+    iniciado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
+    finalizado_em: Mapped[datetime | None] = mapped_column(UtcDateTime)
     duracao_s: Mapped[float | None] = mapped_column()
     itens_encontrados: Mapped[int] = mapped_column(Integer, default=0)
     itens_novos: Mapped[int] = mapped_column(Integer, default=0)
@@ -581,4 +649,4 @@ class ReferenciaFipe(Base):
     combustivel: Mapped[str | None] = mapped_column(String(40))
     valor: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     mes_referencia: Mapped[str] = mapped_column(String(7))
-    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
+    atualizado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)

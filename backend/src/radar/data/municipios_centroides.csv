@@ -1,0 +1,34 @@
+# Centroides APROXIMADOS de municipio para as tres UFs do escopo.
+# Precisao: MUNICIPIO (nao e o endereco do imovel). A API devolve essa precisao
+# junto com as coordenadas e o mapa desenha o ponto como area, nao como pino
+# exato -- ver secao 11: o usuario precisa saber a qualidade do dado.
+# Para geocodificacao no nivel de endereco, configure um provedor real
+# (radar.ingest.geocode.GeocodificadorNominatim) respeitando os termos de uso.
+uf,cidade,latitude,longitude
+AL,Maceió,-9.6658,-35.7353
+AL,Arapiraca,-9.7522,-36.6611
+AL,Palmeira dos Índios,-9.4058,-36.6272
+AL,União dos Palmares,-9.1608,-36.0281
+AL,Rio Largo,-9.4783,-35.8536
+AL,Penedo,-10.2906,-36.5861
+AL,Marechal Deodoro,-9.7097,-35.8975
+AL,Delmiro Gouveia,-9.3869,-37.9975
+SE,Aracaju,-10.9472,-37.0731
+SE,Nossa Senhora do Socorro,-10.8550,-37.1261
+SE,Lagarto,-10.9172,-37.6697
+SE,Itabaiana,-10.6858,-37.4247
+SE,São Cristóvão,-11.0147,-37.2061
+SE,Estância,-11.2678,-37.4381
+SE,Tobias Barreto,-11.1839,-37.9983
+PE,Recife,-8.0476,-34.8770
+PE,Jaboatão dos Guararapes,-8.1128,-35.0147
+PE,Olinda,-8.0089,-34.8553
+PE,Caruaru,-8.2836,-35.9761
+PE,Petrolina,-9.3891,-40.5030
+PE,Paulista,-7.9408,-34.8728
+PE,Cabo de Santo Agostinho,-8.2856,-35.0350
+PE,Camaragibe,-8.0217,-34.9781
+PE,Garanhuns,-8.8828,-36.4967
+PE,Vitória de Santo Antão,-8.1181,-35.2919
+PE,Igarassu,-7.8342,-34.9061
+PE,Abreu e Lima,-7.9111,-34.9028
