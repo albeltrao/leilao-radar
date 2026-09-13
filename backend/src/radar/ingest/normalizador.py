@@ -18,7 +18,6 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from radar.collectors.dto import LoteBruto, PracaBruta
-from radar.enums import TipoBem
 from radar.ingest.geocode import Geocodificador, GeocodificadorNulo
 from radar.normalizacao import (
     extrair_numero_cnj,
@@ -167,9 +166,11 @@ def normalizar(
     chave = _chave_natural(bruto, tribunal, processo if processo_valido else None, conteudo_hash)
 
     cidade = limpar_espacos(bruto.cidade) or limpar_espacos(bruto.comarca)
-    coord = None
-    if bruto.tipo_bem is TipoBem.IMOVEL or bruto.endereco:
-        coord = geocodificador.localizar(bruto.endereco, bruto.bairro, cidade, uf)
+    # Geocodifica qualquer lote com municipio conhecido, nao so imovel: a
+    # precisao e municipal nos dois casos (para veiculo, a comarca do processo e
+    # uma aproximacao tao valida quanto), e deixar veiculo de fora esvaziava o
+    # mapa sem ganho de honestidade -- a precisao ja viaja junto da coordenada.
+    coord = geocodificador.localizar(bruto.endereco, bruto.bairro, cidade, uf)
 
     return LoteNormalizado(
         bruto=bruto,

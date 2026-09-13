@@ -254,7 +254,10 @@ def test_custo_total_soma_comissao_e_debitos(sessao_db):
     total, detalhes = custo_total_estimado(lote)
     # 160.000 + 5% (8.000) + 8.450 de IPTU
     assert total == Decimal("176450.00")
-    assert any("ITBI" in d for d in detalhes)
+    assert any("comissão" in d for d in detalhes)
+    assert any("iptu" in d for d in detalhes)
+    # A ressalva de ITBI mora no campo `aviso` da API, não na composição do custo.
+    assert not any("ITBI" in d for d in detalhes)
 
 
 def test_custo_total_sem_lance_conhecido(sessao_db):

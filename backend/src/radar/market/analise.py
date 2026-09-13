@@ -293,7 +293,6 @@ def custo_total_estimado(
         if valor:
             total += Decimal(str(valor))
             detalhes.append(f"débito de {debito.get('tipo')} R$ {valor}")
-    detalhes.append(
-        "Não inclui ITBI, custas de registro, despesas de imissão na posse nem reforma."
-    )
+    # A ressalva sobre ITBI/registro/reforma NAO entra aqui: ela e o campo
+    # `aviso` da resposta da API. Repetir nos dois lugares so polui a tela.
     return total.quantize(Decimal("0.01")), detalhes

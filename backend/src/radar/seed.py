@@ -40,7 +40,7 @@ from radar.market.analise import analisar
 from radar.market.fipe import carregar_espelho
 from radar.market.fipezap import carregar_indice
 from radar.models import Alerta, Documento, Usuario
-from radar.normalizacao import formatar_cnj
+from radar.normalizacao import FUSO_BRASILIA, formatar_cnj
 from radar.scoring import score as motor_score
 
 logger = logging.getLogger(__name__)
@@ -255,7 +255,9 @@ def popular(sessao: Session, com_usuario: bool = True) -> dict:
                 )
             if True:
                 documento = lote.documentos[0]
-                documento.texto = caminho.read_text(encoding="utf-8")
+                documento.texto = _sincronizar_datas_do_edital(
+                    caminho.read_text(encoding="utf-8"), bruto
+                )
                 documento.paginas = 1
                 documento.extraido_em = datetime.now(UTC)
                 resultado = parser.extrair(documento.texto)
@@ -299,3 +301,25 @@ def popular(sessao: Session, com_usuario: bool = True) -> dict:
         "usuario_demo": usuario.email if usuario else None,
         "senha_demo": "radar-demo-2026" if usuario else None,
     }
+
+
+# Datas fixas dos editais de exemplo, substituidas pelas datas geradas.
+_DATAS_FIXTURE = {1: "10/11/2026", 2: "24/11/2026"}
+
+
+def _sincronizar_datas_do_edital(texto: str, bruto: LoteBruto) -> str:
+    """Alinha as datas do edital de exemplo com as pracas geradas pelo seed.
+
+    O texto do edital tem datas fixas; as pracas do seed sao relativas a hoje,
+    para que a demonstracao nunca mostre so leiloes vencidos. Sem esta
+    substituicao, a tela exibiria "1a praca: 25/09" no calendario e
+    "Data da 1a praca: 10/11" nos campos extraidos do MESMO lote -- o tipo de
+    inconsistencia que destroi a confianca em tudo o mais que a tela afirma.
+    """
+    for praca in bruto.pracas:
+        alvo = _DATAS_FIXTURE.get(praca.ordem)
+        if not alvo or praca.data_hora is None:
+            continue
+        local = praca.data_hora + timedelta(hours=FUSO_BRASILIA)
+        texto = texto.replace(alvo, f"{local:%d/%m/%Y}")
+    return texto
