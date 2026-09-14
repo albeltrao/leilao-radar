@@ -22,9 +22,14 @@ leiloeiros_app = typer.Typer(
     no_args_is_help=True,
 )
 mercado_app = typer.Typer(help="Referências de valor de mercado.", no_args_is_help=True)
+diarios_app = typer.Typer(
+    help="Diário da Justiça (estadual e federal): coleta, leitura e agenda.",
+    no_args_is_help=True,
+)
 app.add_typer(fontes_app, name="fontes")
 app.add_typer(leiloeiros_app, name="leiloeiros")
 app.add_typer(mercado_app, name="mercado")
+app.add_typer(diarios_app, name="diarios")
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 eco = typer.echo
@@ -447,3 +452,155 @@ def leiloeiros_sugerir_perfis(
 
 if __name__ == "__main__":  # pragma: no cover
     app()
+
+
+# ---------------------------------------------------------------------------
+# Diario da Justica
+# ---------------------------------------------------------------------------
+
+
+@diarios_app.command("coletar")
+def diarios_coletar(
+    uf: Annotated[str | None, typer.Option(help="Limita a uma UF (AL, BA, PE, SE)")] = None,
+    esfera: Annotated[
+        str | None, typer.Option(help="ESTADUAL ou FEDERAL; vazio traz as duas")
+    ] = None,
+    incluir_nao_validados: Annotated[
+        bool, typer.Option(help="Inclui fontes ainda não validadas ao vivo")
+    ] = False,
+) -> None:
+    """Lê o Diário da Justiça e transforma em lote o que for leilão.
+
+    Precisa de rede liberada para a API Comunica do CNJ. Enquanto os conectores
+    não forem validados ao vivo, use --incluir-nao-validados de propósito: assim
+    ninguém liga a coleta em produção achando que o contrato foi conferido.
+    """
+    from radar.collectors.base import listar
+    from radar.collectors.http import criar_fetcher
+    from radar.enums import EsferaJustica, TipoFonte
+    from radar.ingest.fila import criar_fila
+    from radar.ingest.pipeline import executar_coleta, processar_fila
+
+    alvo_esfera = EsferaJustica(esfera.upper()) if esfera else None
+    fontes = [
+        c
+        for c in listar(tipo=TipoFonte.DIARIO_OFICIAL, uf=uf.upper() if uf else None)
+        if alvo_esfera is None or c.esfera is alvo_esfera
+    ]
+    if not fontes:
+        raise typer.BadParameter(f"nenhum diário para uf={uf} esfera={esfera}")
+
+    criar_schema()
+    fila = criar_fila()
+    with abrir_sessao() as sessao, criar_fetcher() as fetcher:
+        for conector in fontes:
+            execucao = executar_coleta(
+                conector, fetcher, fila, sessao, incluir_nao_validados=incluir_nao_validados
+            )
+            cor = {
+                "SUCESSO": typer.colors.GREEN,
+                "PARCIAL": typer.colors.YELLOW,
+            }.get(str(execucao.status), typer.colors.RED)
+            typer.secho(
+                f"{execucao.fonte_slug:16s} {execucao.status:12s} "
+                f"itens={execucao.itens_encontrados:<5} {execucao.erro or ''}",
+                fg=cor,
+            )
+        stats = processar_fila(fila, sessao)
+
+    eco(
+        f"\npublicações lidas: {stats.publicacoes_lidas} | "
+        f"detectadas como leilão: {stats.publicacoes_com_leilao} | "
+        f"lotes novos: {stats.novos} | atualizados: {stats.atualizados}"
+    )
+    if stats.publicacoes_lidas and not stats.publicacoes_com_leilao:
+        typer.secho(
+            "Nenhuma publicação passou no limiar de detecção. Confira as guardadas com\n"
+            "`radar diarios publicacoes --todas` antes de mexer em "
+            "RADAR_DIARIO_LIMIAR_DETECCAO.",
+            fg=typer.colors.YELLOW,
+        )
+
+
+@diarios_app.command("publicacoes")
+def diarios_publicacoes(
+    uf: Annotated[str | None, typer.Option(help="Filtra por UF")] = None,
+    todas: Annotated[
+        bool, typer.Option(help="Mostra também as que NÃO foram detectadas como leilão")
+    ] = False,
+    revisao: Annotated[
+        bool, typer.Option(help="Só as marcadas para revisão humana")
+    ] = False,
+    limite: int = 30,
+) -> None:
+    """Lista o que foi lido do diário, com a confiança e o trecho da detecção."""
+    from sqlalchemy import select
+
+    from radar.models import PublicacaoDiario
+
+    consulta = select(PublicacaoDiario).order_by(PublicacaoDiario.data_publicacao.desc())
+    if uf:
+        consulta = consulta.where(PublicacaoDiario.uf == uf.upper())
+    if not todas:
+        consulta = consulta.where(PublicacaoDiario.detectado_como_leilao.is_(True))
+    if revisao:
+        consulta = consulta.where(PublicacaoDiario.revisao_necessaria.is_(True))
+
+    with abrir_sessao() as sessao:
+        itens = list(sessao.scalars(consulta.limit(limite)))
+        if not itens:
+            eco("nenhuma publicação. Rode `radar diarios coletar` primeiro.")
+            return
+        for p in itens:
+            marca = "LEILÃO" if p.detectado_como_leilao else "  --  "
+            dia = p.data_publicacao.strftime("%d/%m/%Y") if p.data_publicacao else "??"
+            eco(
+                f"[{marca}] {dia} {p.diario_slug:14s} {str(p.esfera):9s} "
+                f"{p.uf or '--'} conf={p.confianca_deteccao:.2f} "
+                f"{'REVISAR' if p.revisao_necessaria else '       '} "
+                f"lote={p.lote_id or '-'}"
+            )
+            if p.evidencia:
+                eco(f"         {p.evidencia[:150]}")
+
+
+@diarios_app.command("agenda")
+def diarios_agenda(
+    dias: Annotated[int, typer.Option(help="Janela a partir de hoje")] = 30,
+    uf: Annotated[str | None, typer.Option(help="Filtra por UF")] = None,
+    esfera: Annotated[str | None, typer.Option(help="ESTADUAL ou FEDERAL")] = None,
+    categoria: Annotated[
+        str | None,
+        typer.Option(help="IMOVEL_URBANO, IMOVEL_RURAL, IMOVEL_INDEFINIDO, MOVEL"),
+    ] = None,
+    somente_de_diario: Annotated[
+        bool, typer.Option(help="Só os leilões que vieram do Diário da Justiça")
+    ] = False,
+) -> None:
+    """Agenda cronológica dos leilões, agrupada por tipo de bem."""
+    from radar.agenda import FiltroAgenda, montar
+    from radar.enums import EsferaJustica
+
+    filtro = FiltroAgenda(
+        dias=dias,
+        ufs=[uf.upper()] if uf else [],
+        esferas=[EsferaJustica(esfera.upper())] if esfera else [],
+        categorias=[categoria.upper()] if categoria else [],
+        somente_de_diario=somente_de_diario,
+    )
+    with abrir_sessao() as sessao:
+        agenda = montar(sessao, filtro)
+
+    eco(f"{agenda.total} leilões nos próximos {dias} dias ({agenda.total_de_diario} do diário)\n")
+    for contagem in agenda.categorias:
+        if contagem.total:
+            eco(f"  {contagem.rotulo:34s} {contagem.total}")
+    for dia in agenda.dias:
+        eco(f"\n{dia.data} ({dia.total})")
+        for item in dia.itens:
+            hora = item.data_hora.strftime("%H:%M")
+            eco(
+                f"  {hora} [{item.categoria_rotulo}] {item.titulo[:70]} "
+                f"- {item.cidade or item.comarca or '?'}/{item.uf or '?'} "
+                f"({item.esfera.lower()})"
+            )

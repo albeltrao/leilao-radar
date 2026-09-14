@@ -4,6 +4,7 @@ import { ProvedorSessao, useSessao } from "./sessao";
 import { Painel } from "./paginas/Painel";
 import { DetalheLote } from "./paginas/DetalheLote";
 import { Calendario } from "./paginas/Calendario";
+import { Diarios } from "./paginas/Diarios";
 import { PaginaMapa } from "./paginas/PaginaMapa";
 import { Comparar } from "./paginas/Comparar";
 import { Onboarding } from "./paginas/Onboarding";
@@ -14,6 +15,7 @@ import { REGIAO_POR_EXTENSO, REGIAO_SIGLAS } from "./ufs";
 const LINKS = [
   { para: "/", rotulo: "Lotes", fim: true },
   { para: "/calendario", rotulo: "Calendário" },
+  { para: "/diarios", rotulo: "Diários" },
   { para: "/mapa", rotulo: "Mapa" },
   { para: "/comparar", rotulo: "Comparar" },
   { para: "/como-funciona", rotulo: "Como funciona" },
@@ -70,7 +72,8 @@ function Rodape() {
           consulte o documento original e um advogado antes de participar do leilão.
         </p>
         <p className="rodape__fontes">
-          Fontes: tribunais de justiça e juntas comerciais de {REGIAO_POR_EXTENSO},
+          Fontes: Diário de Justiça Eletrônico Nacional (justiças estadual e
+          federal), tribunais de justiça e juntas comerciais de {REGIAO_POR_EXTENSO},
           DataJud/CNJ, Tabela FIPE e índice FipeZap. Cada dado exibido traz a sua
           origem e a data da coleta.
         </p>
@@ -91,6 +94,7 @@ export function App() {
           <Route path="/" element={<Painel />} />
           <Route path="/lote/:id" element={<DetalheLote />} />
           <Route path="/calendario" element={<Calendario />} />
+          <Route path="/diarios" element={<Diarios />} />
           <Route path="/mapa" element={<PaginaMapa />} />
           <Route path="/comparar" element={<Comparar />} />
           <Route path="/como-funciona" element={<Onboarding />} />

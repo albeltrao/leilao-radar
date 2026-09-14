@@ -15,7 +15,7 @@ from typing import Any
 from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.orm import selectinload
 
-from radar.enums import StatusLote, TipoBem
+from radar.enums import EsferaJustica, NaturezaBem, StatusLote, TipoBem, ZonaImovel
 from radar.models import EventoCalendario, Leilao, Lote, ScoreOportunidade
 from radar.normalizacao import normalizar_texto
 
@@ -34,6 +34,10 @@ class FiltroLotes:
     cidades: list[str] = field(default_factory=list)
     bairros: list[str] = field(default_factory=list)
     tipo_bem: list[TipoBem] = field(default_factory=list)
+    # Eixos da agenda: movel x imovel, rural x urbano, estadual x federal.
+    natureza_bem: list[NaturezaBem] = field(default_factory=list)
+    zona_imovel: list[ZonaImovel] = field(default_factory=list)
+    esfera: list[EsferaJustica] = field(default_factory=list)
     status: list[StatusLote] = field(default_factory=lambda: [StatusLote.ABERTO])
     valor_minimo: Decimal | None = None
     valor_maximo: Decimal | None = None
@@ -64,6 +68,13 @@ class FiltroLotes:
             cidades=[str(c) for c in lista("cidades")],
             bairros=[str(b) for b in lista("bairros")],
             tipo_bem=[TipoBem(t) for t in lista("tipo_bem") if t in set(TipoBem)],
+            natureza_bem=[
+                NaturezaBem(n) for n in lista("natureza_bem") if n in set(NaturezaBem)
+            ],
+            zona_imovel=[
+                ZonaImovel(z) for z in lista("zona_imovel") if z in set(ZonaImovel)
+            ],
+            esfera=[EsferaJustica(e) for e in lista("esfera") if e in set(EsferaJustica)],
             status=[StatusLote(s) for s in lista("status") if s in set(StatusLote)]
             or [StatusLote.ABERTO],
             valor_minimo=_decimal(dados.get("valor_minimo")),
@@ -110,6 +121,12 @@ def construir(filtro: FiltroLotes, agora: datetime | None = None) -> Select:
         consulta = consulta.where(Lote.uf.in_(filtro.uf))
     if filtro.tipo_bem:
         consulta = consulta.where(Lote.tipo_bem.in_(filtro.tipo_bem))
+    if filtro.natureza_bem:
+        consulta = consulta.where(Lote.natureza_bem.in_(filtro.natureza_bem))
+    if filtro.zona_imovel:
+        consulta = consulta.where(Lote.zona_imovel.in_(filtro.zona_imovel))
+    if filtro.esfera:
+        consulta = consulta.where(Lote.esfera.in_(filtro.esfera))
     if filtro.valor_minimo is not None:
         consulta = consulta.where(
             or_(

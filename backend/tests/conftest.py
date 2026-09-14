@@ -47,3 +47,18 @@ def sessao_db(settings, tmp_path, monkeypatch):
     with db_mod.sessao() as s:
         yield s
     db_mod.resetar_estado_global()
+
+
+@pytest.fixture
+def cliente_api(sessao_db, settings):
+    """API apontando para o banco do teste, SEM dados de demonstracao.
+
+    Diferente do `cliente` de test_api.py, que popula o seed: aqui o teste
+    monta o cenario que quer medir, sem os 10 lotes ficticios no meio.
+    """
+    from fastapi.testclient import TestClient
+
+    from radar.api.app import criar_app
+
+    with TestClient(criar_app(settings)) as cliente:
+        yield cliente

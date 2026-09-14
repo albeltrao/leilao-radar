@@ -22,8 +22,14 @@ from sqlalchemy.orm import Session
 
 from radar.api.auth import registrar_usuario
 from radar.calendario.eventos import sincronizar_eventos
-from radar.collectors.dto import DocumentoBruto, LoteBruto, PracaBruta
+from radar.collectors.dto import (
+    DocumentoBruto,
+    LoteBruto,
+    PracaBruta,
+    PublicacaoBruta,
+)
 from radar.enums import (
+    EsferaJustica,
     JuntaComercial,
     ModalidadeLeilao,
     StatusLeiloeiro,
@@ -35,7 +41,11 @@ from radar.extraction.edital import ParserEdital
 from radar.extraction.servico import _persistir_campos, aplicar_no_lote
 from radar.ingest.geocode import GeocodificadorMunicipio
 from radar.ingest.normalizador import normalizar
-from radar.ingest.pipeline import persistir_leiloeiro, persistir_lote
+from radar.ingest.pipeline import (
+    persistir_leiloeiro,
+    persistir_lote,
+    persistir_publicacao,
+)
 from radar.market.analise import analisar
 from radar.market.fipe import carregar_espelho
 from radar.market.fipezap import carregar_indice
@@ -61,6 +71,132 @@ LEILOEIROS = [
     dict(nome="Helena Barbosa Leiloeira Oficial", matricula="18/2017",
          junta=JuntaComercial.JUCEB, uf="BA", site_url="https://leiloes-ba-exemplo.invalid"),
 ]
+
+
+DIARIO_DEMO = "demo-diario-justica"
+
+
+def _publicacoes() -> list[PublicacaoBruta]:
+    """Publicações FICTÍCIAS de diário, para a agenda ter o que mostrar.
+
+    Existem porque a aba "Diários" precisa exibir o caminho inteiro -- detecção,
+    confiança, trecho literal, categoria do bem -- e nenhum conector real pode
+    rodar sem rede. Os textos imitam a forma de um edital publicado no DJEN; os
+    processos usam dígito verificador válido para exercitar o mesmo caminho de
+    código, mas o resto é inventado e as URLs são .invalid.
+    """
+    urbano = _daqui(21, 10)
+    urbano_2 = _daqui(35, 10)
+    rural = _daqui(28, 9)
+    rural_2 = _daqui(42, 9)
+    federal = _daqui(17, 11)
+    federal_2 = _daqui(31, 11)
+    processo_al = formatar_cnj("4400123", "2025", "8", "02", "0001")
+    processo_ba = formatar_cnj("4400456", "2025", "8", "05", "0001")
+    processo_pe = formatar_cnj("4400789", "2025", "4", "05", "8300")
+
+    def publicado(dias: int) -> datetime:
+        return datetime.now(UTC) - timedelta(days=dias)
+
+    return [
+        PublicacaoBruta(
+            fonte_slug=DIARIO_DEMO,
+            fonte_url="https://diario-exemplo.invalid/edicao/3421#p1",
+            diario_slug=DIARIO_DEMO,
+            diario_nome="Diário da Justiça (demonstração) - TJAL",
+            identificador="demo-1",
+            esfera=EsferaJustica.ESTADUAL,
+            tribunal_sigla="TJAL",
+            uf="AL",
+            data_publicacao=publicado(4),
+            numero_edicao="3421",
+            caderno="Editais",
+            orgao="2ª Vara Cível da Comarca de Maceió",
+            municipio="Maceió",
+            texto=(
+                f"EDITAL DE LEILÃO JUDICIAL. O Juízo da 2ª Vara Cível da Comarca de "
+                f"Maceió/AL, nos autos da execução nº {processo_al}, FAZ SABER que levará "
+                "a público leilão eletrônico o BEM: sala comercial nº 12, situada na "
+                "Avenida Fictícia, nº 500, bairro Jatiúca, Maceió/AL, em zona urbana, "
+                "matrícula nº 88.100 do Registro de Imóveis, avaliada em R$ 320.000,00. "
+                f"1ª praça em {urbano:%d/%m/%Y}, às 10h00; 2ª praça em "
+                f"{urbano_2:%d/%m/%Y}, às 10h00, não sendo aceito lance inferior a 55% "
+                "do valor da avaliação. Leiloeira pública oficial ANA PAULA FERREIRA "
+                "LIMA, matrícula JUCEAL nº 12/2019."
+            ),
+        ),
+        PublicacaoBruta(
+            fonte_slug=DIARIO_DEMO,
+            fonte_url="https://diario-exemplo.invalid/edicao/2210#p7",
+            diario_slug=DIARIO_DEMO,
+            diario_nome="Diário da Justiça (demonstração) - TJBA",
+            identificador="demo-2",
+            esfera=EsferaJustica.ESTADUAL,
+            tribunal_sigla="TJBA",
+            uf="BA",
+            data_publicacao=publicado(2),
+            numero_edicao="2210",
+            caderno="Editais",
+            orgao="Vara Única da Comarca de Feira de Santana",
+            municipio="Feira de Santana",
+            texto=(
+                f"EDITAL DE 1ª E 2ª PRAÇA. O Juízo da Vara Única da Comarca de Feira de "
+                f"Santana/BA, nos autos da execução fiscal nº {processo_ba}, torna público "
+                "que levará a hasta pública o BEM: imóvel rural denominado Fazenda "
+                "Exemplo, situado na zona rural do município de Feira de Santana/BA, com "
+                "área de 48 hectares, CCIR nº 000.000.000.000-0, matrícula nº 3.045 do "
+                "Registro de Imóveis, avaliado em R$ 1.250.000,00. Primeira praça em "
+                f"{rural:%d/%m/%Y}, às 09h00. Segunda praça em {rural_2:%d/%m/%Y}, às "
+                "09h00, admitindo-se lance não inferior a 60% da avaliação. Leiloeira "
+                "pública oficial HELENA BARBOSA, matrícula JUCEB nº 18/2017."
+            ),
+        ),
+        PublicacaoBruta(
+            fonte_slug=DIARIO_DEMO,
+            fonte_url="https://diario-exemplo.invalid/edicao/0912#p3",
+            diario_slug=DIARIO_DEMO,
+            diario_nome="Diário da Justiça (demonstração) - TRF5",
+            identificador="demo-3",
+            esfera=EsferaJustica.FEDERAL,
+            tribunal_sigla="TRF5",
+            uf=None,  # a UF sai da seção judiciária citada no texto
+            data_publicacao=publicado(1),
+            caderno="Editais",
+            orgao="9ª Vara Federal da Seção Judiciária de Pernambuco",
+            texto=(
+                "EDITAL DE LEILÃO. A Justiça Federal, por meio da 9ª Vara Federal da "
+                "Seção Judiciária de Pernambuco, nos autos da execução fiscal nº "
+                f"{processo_pe}, FAZ SABER que realizará leilão judicial eletrônico do "
+                "BEM: veículo automóvel marca Volkswagen, modelo Delivery 9.170, ano de "
+                "fabricação 2016, ano modelo 2017, placa PQR2A34, avaliado em "
+                f"R$ 132.000,00. 1ª praça em {federal:%d/%m/%Y}, às 11h00; 2ª praça em "
+                f"{federal_2:%d/%m/%Y}, às 11h00, não se admitindo lance inferior a 50% "
+                "da avaliação. Leiloeiro público oficial JOSÉ ALMEIDA, matrícula JUCEPE "
+                "nº 31/2016."
+            ),
+        ),
+        PublicacaoBruta(
+            fonte_slug=DIARIO_DEMO,
+            fonte_url="https://diario-exemplo.invalid/edicao/3421#p9",
+            diario_slug=DIARIO_DEMO,
+            diario_nome="Diário da Justiça (demonstração) - TJAL",
+            identificador="demo-4",
+            esfera=EsferaJustica.ESTADUAL,
+            tribunal_sigla="TJAL",
+            uf="AL",
+            data_publicacao=publicado(4),
+            numero_edicao="3421",
+            caderno="Intimações",
+            orgao="1ª Vara de Família da Comarca de Maceió",
+            # Publicação que NÃO é leilão, de propósito: o painel precisa mostrar
+            # que o detector descarta, e com que base.
+            texto=(
+                "INTIMAÇÃO. Ficam as partes intimadas do despacho de fls. 210 para que "
+                "se manifestem, no prazo de 15 (quinze) dias, sobre os documentos "
+                "juntados aos autos, sob pena de preclusão."
+            ),
+        ),
+    ]
 
 
 def _daqui(dias: int, hora: int = 14) -> datetime:
@@ -305,6 +441,20 @@ def popular(sessao: Session, com_usuario: bool = True) -> dict:
         sessao.flush()
         motor_score.calcular(sessao, lote)
 
+    # Publicações de diário: passam pelo MESMO detector e pela mesma persistência
+    # da coleta real, para a tela de demonstração não mostrar um caminho fictício.
+    detectadas = 0
+    for publicacao in _publicacoes():
+        dados = _serializar_publicacao_demo(publicacao)
+        resumo = persistir_publicacao(sessao, dados, geocodificador=geocodificador)
+        if resumo.virou_lote:
+            detectadas += 1
+            sessao.flush()
+            sincronizar_eventos(sessao, resumo.lote)
+            analisar(sessao, resumo.lote)
+            sessao.flush()
+            motor_score.calcular(sessao, resumo.lote)
+
     usuario = None
     if com_usuario:
         usuario = sessao.scalar(select(Usuario).where(Usuario.email == "demo@example.org"))
@@ -327,6 +477,8 @@ def popular(sessao: Session, com_usuario: bool = True) -> dict:
     sessao.flush()
     return {
         "lotes_criados": criados,
+        "publicacoes_diario": len(_publicacoes()),
+        "publicacoes_detectadas": detectadas,
         "documentos": sessao.scalar(
             select(Documento).limit(1)
         )
@@ -334,6 +486,13 @@ def popular(sessao: Session, com_usuario: bool = True) -> dict:
         "usuario_demo": usuario.email if usuario else None,
         "senha_demo": "radar-demo-2026" if usuario else None,
     }
+
+
+def _serializar_publicacao_demo(publicacao: PublicacaoBruta) -> dict:
+    """Mesmo formato que a fila entrega ao pipeline, sem passar pela fila."""
+    from radar.ingest.pipeline import _serializar_publicacao
+
+    return _serializar_publicacao(publicacao)
 
 
 # Datas fixas dos editais de exemplo, substituidas pelas datas geradas.

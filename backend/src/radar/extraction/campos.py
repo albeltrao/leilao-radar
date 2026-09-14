@@ -13,6 +13,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from radar.enums import MetodoExtracao
+from radar.normalizacao import limpar_espacos, remover_acentos
 
 LIMIAR_REVISAO = 0.70
 
@@ -79,3 +80,40 @@ class ResultadoExtracao:
     @property
     def campos_para_revisao(self) -> list[Achado]:
         return [a for a in self.achados if a.revisao_necessaria]
+
+
+@dataclass(slots=True)
+class Contexto:
+    """Texto original + copia sem acento e em minuscula, com offsets alinhados.
+
+    Todo casamento roda sobre ``busca``; a evidencia e recortada de ``original``,
+    para o usuario ler o trecho como esta no documento, com acento e maiuscula.
+
+    ARMADILHA ao escrever padrao novo: a normalizacao NFKD tambem converte os
+    indicadores ordinais. "nº" vira "no", "1ª" vira "1a" e "2º" vira "2o" ANTES
+    de o regex rodar. Um padrao que procure literalmente "º" nunca casa. Sempre
+    inclua a letra na classe: ``[oº°]``, ``[aª]``.
+    """
+
+    original: str
+    busca: str
+
+    def evidencia(self, inicio: int, fim: int, margem: int = 110) -> str:
+        trecho = self.original[max(0, inicio - margem) : min(len(self.original), fim + margem)]
+        return limpar_espacos(trecho) or ""
+
+
+def contexto(texto: str) -> Contexto:
+    """Monta o Contexto. Cai para o texto cru se a normalizacao mudar o tamanho.
+
+    Remover acento preserva o comprimento em portugues (cada precomposta vira uma
+    base mais uma combinante, e a combinante some). Mas ligaduras e fracoes -- "ﬁ"
+    virando "fi", "1/2" virando tres caracteres -- nao preservam, e ai os offsets
+    deslizariam: a evidencia sairia recortada no lugar errado, apontando para um
+    trecho que nao sustenta o valor. Preferimos perder a insensibilidade a acento
+    naquele documento raro a exibir prova falsa.
+    """
+    busca = remover_acentos(texto).lower()
+    if len(busca) != len(texto):
+        busca = texto.lower()
+    return Contexto(original=texto, busca=busca)

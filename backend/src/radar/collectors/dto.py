@@ -11,6 +11,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from radar.enums import (
+    EsferaJustica,
     JuntaComercial,
     ModalidadeLeilao,
     StatusLeiloeiro,
@@ -107,14 +108,47 @@ class LeiloeiroBruto:
 
 
 @dataclass(slots=True)
+class PublicacaoBruta:
+    """Uma publicacao do Diario da Justica, como o diario a publicou.
+
+    O conector nao decide se e leilao: ele so recorta a publicacao e diz de onde
+    veio. A deteccao roda em radar.diarios, sobre este DTO -- assim o mesmo
+    detector serve a qualquer diario, e trocar o limiar nao mexe em conector.
+
+    ``identificador`` e o que torna a coleta idempotente: o mesmo numero de
+    comunicacao coletado de novo atualiza a linha em vez de duplicar o lote.
+    """
+
+    fonte_slug: str
+    fonte_url: str
+    diario_slug: str
+    diario_nome: str
+    identificador: str
+    texto: str
+    esfera: EsferaJustica = EsferaJustica.DESCONHECIDA
+    tribunal_sigla: str | None = None
+    uf: str | None = None
+    data_publicacao: datetime | None = None
+    data_divulgacao: datetime | None = None
+    numero_edicao: str | None = None
+    caderno: str | None = None
+    numero_processo: str | None = None
+    orgao: str | None = None
+    municipio: str | None = None
+    extras: dict = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class ResultadoConector:
     lotes: list[LoteBruto] = field(default_factory=list)
     leiloeiros: list[LeiloeiroBruto] = field(default_factory=list)
+    publicacoes: list[PublicacaoBruta] = field(default_factory=list)
     paginas_visitadas: int = 0
     avisos: list[str] = field(default_factory=list)
 
     def estender(self, outro: ResultadoConector) -> None:
         self.lotes.extend(outro.lotes)
         self.leiloeiros.extend(outro.leiloeiros)
+        self.publicacoes.extend(outro.publicacoes)
         self.paginas_visitadas += outro.paginas_visitadas
         self.avisos.extend(outro.avisos)

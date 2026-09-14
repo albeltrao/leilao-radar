@@ -86,7 +86,9 @@ def test_cnj_invalido_e_rejeitado():
     assert not numero_cnj_valido("0000000-00.0000.0.00.0000")
     assert not numero_cnj_valido("123")
     assert not numero_cnj_valido(None)
-    assert tribunal_do_cnj(formatar_cnj("1", "2024", "4", "05", "0001")) is None  # federal
+    # Segmento 4 (federal) resolve para o TRF; TR desconhecido continua None.
+    assert tribunal_do_cnj(formatar_cnj("1", "2024", "4", "05", "0001")) == "TRF5"
+    assert tribunal_do_cnj(formatar_cnj("1", "2024", "4", "03", "0001")) is None
 
 
 def test_minimizacao_lgpd():

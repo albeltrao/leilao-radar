@@ -18,8 +18,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from radar.collectors.dto import LoteBruto, PracaBruta
+from radar.diarios.classificacao import ClassificacaoBem, classificar_bem
+from radar.enums import EsferaJustica
 from radar.ingest.geocode import Geocodificador, GeocodificadorNulo
-from radar.jurisdicoes import TRIBUNAL_POR_UF, UFS
+from radar.jurisdicoes import TRIBUNAL_POR_UF, UFS, esfera_do_tribunal
 from radar.jurisdicoes import UF_POR_TRIBUNAL as _UF_POR_TRIBUNAL
 from radar.normalizacao import (
     extrair_numero_cnj,
@@ -57,6 +59,8 @@ class LoteNormalizado:
     longitude: float | None = None
     geocodificacao_precisao: str | None = None
     pracas: list[PracaBruta] = field(default_factory=list)
+    classificacao: ClassificacaoBem = field(default_factory=ClassificacaoBem)
+    esfera: EsferaJustica = EsferaJustica.DESCONHECIDA
     avisos: list[str] = field(default_factory=list)
 
     @property
@@ -131,8 +135,18 @@ def _derivar_minimos(bruto: LoteBruto, avisos: list[str]) -> list[PracaBruta]:
 
 
 def normalizar(
-    bruto: LoteBruto, geocodificador: Geocodificador | None = None
+    bruto: LoteBruto,
+    geocodificador: Geocodificador | None = None,
+    classificacao: ClassificacaoBem | None = None,
 ) -> LoteNormalizado:
+    """Normaliza o lote bruto. ``classificacao`` pronta evita reclassificar.
+
+    Quem vem do diario ja foi classificado sobre o trecho do bem, que e mais
+    preciso que a publicacao inteira -- o endereco do forum citado no rodape
+    puxaria a classificacao para "imovel urbano". Passar a classificacao aqui
+    preserva esse recorte; quem nao passa, e classificado pelo titulo mais a
+    descricao, que e o que existe para um lote de site de leiloeiro.
+    """
     geocodificador = geocodificador or GeocodificadorNulo()
     avisos: list[str] = []
 
@@ -175,6 +189,29 @@ def normalizar(
     # mapa sem ganho de honestidade -- a precisao ja viaja junto da coordenada.
     coord = geocodificador.localizar(bruto.endereco, bruto.bairro, cidade, uf)
 
+    if classificacao is None:
+        # Endereco e bairro entram no texto classificado: "Rua X, Bairro Y" e
+        # sinal de zona urbana tao bom quanto a palavra "urbano", e o conector
+        # os traz em coluna propria, fora do titulo e da descricao. Deixa-los de
+        # fora fazia apartamento com endereco completo cair em "zona nao
+        # identificada" -- indefinicao inventada, nao observada.
+        # O bairro entra escrito por extenso ("bairro Jardins") porque o
+        # classificador le texto: a fonte declarou um bairro, e bairro e
+        # subdivisao urbana. Sinal fraco de proposito -- sozinho fica abaixo do
+        # limiar e o campo vai para revisao, que e o certo para um indicio.
+        bairro = f"bairro {bruto.bairro}" if bruto.bairro else None
+        classificacao = classificar_bem(
+            " ".join(
+                p for p in (bruto.titulo, descricao, bruto.endereco, bairro) if p
+            ),
+            bruto.tipo_bem,
+        )
+    if classificacao.conflito_zona:
+        avisos.append(
+            "sinais de zona rural e urbana na mesma descricao; zona ficou indefinida "
+            "e o campo vai para revisao"
+        )
+
     return LoteNormalizado(
         bruto=bruto,
         chave_natural=chave,
@@ -192,6 +229,8 @@ def normalizar(
         longitude=coord.longitude if coord else None,
         geocodificacao_precisao=coord.precisao if coord else None,
         pracas=pracas,
+        classificacao=classificacao,
+        esfera=esfera_do_tribunal(tribunal),
         avisos=avisos,
     )
 

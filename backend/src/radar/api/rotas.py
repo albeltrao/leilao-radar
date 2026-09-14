@@ -9,6 +9,8 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 
+from radar.agenda import CATEGORIAS, FiltroAgenda, categoria_do_lote
+from radar.agenda import montar as montar_agenda
 from radar.api import conteudo, conversores, schemas
 from radar.api.auth import (
     autenticar,
@@ -20,7 +22,13 @@ from radar.api.deps import SessaoDep, SettingsDep, UsuarioDep
 from radar.calendario import ics
 from radar.collectors.base import listar as listar_conectores
 from radar.consultas import FiltroLotes, buscar
-from radar.enums import StatusLote, TipoBem
+from radar.enums import (
+    EsferaJustica,
+    NaturezaBem,
+    StatusLote,
+    TipoBem,
+    ZonaImovel,
+)
 from radar.market.analise import custo_total_estimado
 from radar.models import (
     Alerta,
@@ -29,6 +37,7 @@ from radar.models import (
     Favorito,
     Leiloeiro,
     Lote,
+    PublicacaoDiario,
     Usuario,
 )
 
@@ -63,6 +72,8 @@ def facetas(sessao: SessaoDep) -> schemas.FacetasResposta:
     cidades = Counter((lo.uf, lo.cidade) for lo in lotes if lo.cidade)
     tipos = Counter(str(lo.tipo_bem) for lo in lotes)
     estados = Counter(str(lo.status) for lo in lotes)
+    categorias = Counter(categoria_do_lote(lo) for lo in lotes)
+    esferas = Counter(str(lo.esfera) for lo in lotes)
     valores = [
         lo.valor_minimo_segunda or lo.valor_minimo_primeira
         for lo in lotes
@@ -75,6 +86,11 @@ def facetas(sessao: SessaoDep) -> schemas.FacetasResposta:
             for (uf, cidade), total in sorted(cidades.items(), key=lambda x: -x[1])
         ],
         tipos_bem=[{"valor": t, "total": n} for t, n in tipos.items()],
+        categorias_bem=[
+            {"valor": chave, "rotulo": rotulo, "total": categorias.get(chave, 0)}
+            for chave, rotulo in CATEGORIAS
+        ],
+        esferas=[{"valor": e, "total": n} for e, n in esferas.items()],
         status=[{"valor": s, "total": n} for s, n in estados.items()],
         leiloeiros=[
             schemas.LeiloeiroResumo.model_validate(le)
@@ -148,12 +164,16 @@ def _filtro_da_query(
     uf, cidade, bairro, tipo_bem, status_lote, valor_minimo, valor_maximo,
     desconto_minimo, score_minimo, dias_ate_praca_max, leiloeiro_id,
     somente_desocupados, sem_onus, q, ordenar, pagina, tamanho,
+    natureza_bem=None, zona_imovel=None, esfera=None,
 ) -> FiltroLotes:
     return FiltroLotes(
         uf=[u.upper() for u in (uf or [])],
         cidades=list(cidade or []),
         bairros=list(bairro or []),
         tipo_bem=[TipoBem(t) for t in (tipo_bem or [])],
+        natureza_bem=[NaturezaBem(n) for n in (natureza_bem or [])],
+        zona_imovel=[ZonaImovel(z) for z in (zona_imovel or [])],
+        esfera=[EsferaJustica(e) for e in (esfera or [])],
         status=[StatusLote(s) for s in (status_lote or [])] or [StatusLote.ABERTO],
         valor_minimo=valor_minimo,
         valor_maximo=valor_maximo,
@@ -177,6 +197,9 @@ def listar_lotes(
     cidade: list[str] | None = Query(default=None),
     bairro: list[str] | None = Query(default=None),
     tipo_bem: list[str] | None = Query(default=None),
+    natureza_bem: list[str] | None = Query(default=None),
+    zona_imovel: list[str] | None = Query(default=None),
+    esfera: list[str] | None = Query(default=None),
     status_lote: list[str] | None = Query(default=None, alias="status"),
     valor_minimo: Decimal | None = None,
     valor_maximo: Decimal | None = None,
@@ -195,6 +218,7 @@ def listar_lotes(
         uf, cidade, bairro, tipo_bem, status_lote, valor_minimo, valor_maximo,
         desconto_minimo, score_minimo, dias_ate_praca_max, leiloeiro_id,
         somente_desocupados, sem_onus, q, ordenar, pagina, tamanho,
+        natureza_bem=natureza_bem, zona_imovel=zona_imovel, esfera=esfera,
     )
     itens, total = buscar(sessao, filtro)
     return schemas.PaginaLotes(
@@ -365,6 +389,143 @@ def historico(sessao: SessaoDep, lote_id: int) -> list[schemas.MudancaEventoResp
     mudancas = [h for evento in lote.eventos for h in evento.historico]
     mudancas.sort(key=lambda h: h.registrado_em, reverse=True)
     return [schemas.MudancaEventoResposta.model_validate(h) for h in mudancas]
+
+
+# ---------------------------------------------------------------------------
+# Agenda e Diario da Justica
+# ---------------------------------------------------------------------------
+
+
+@publico.get("/agenda", response_model=schemas.AgendaResposta)
+def agenda(
+    sessao: SessaoDep,
+    de: datetime | None = None,
+    ate: datetime | None = None,
+    dias: int = Query(default=60, ge=1, le=365),
+    uf: list[str] | None = Query(default=None),
+    esfera: list[str] | None = Query(default=None),
+    categoria: list[str] | None = Query(default=None),
+    somente_de_diario: bool = False,
+    incluir_prazos: bool = False,
+    limite: int = Query(default=500, ge=1, le=2000),
+) -> schemas.AgendaResposta:
+    """Leilões em ordem cronológica, com a contagem por tipo de bem.
+
+    Um único endpoint para os dois recortes de propósito: se a tela pedisse a
+    lista de um lado e as contagens de outro, os dois números divergiriam na
+    primeira coleta que rodasse entre as duas requisições.
+    """
+    filtro = FiltroAgenda(
+        de=de,
+        ate=ate,
+        dias=dias,
+        ufs=[u.upper() for u in (uf or [])],
+        esferas=[EsferaJustica(e) for e in (esfera or [])],
+        categorias=list(categoria or []),
+        somente_de_diario=somente_de_diario,
+        incluir_prazos=incluir_prazos,
+        limite=limite,
+    )
+    return schemas.AgendaResposta.model_validate(
+        montar_agenda(sessao, filtro), from_attributes=True
+    )
+
+
+@publico.get("/agenda.ics")
+def agenda_ics(
+    sessao: SessaoDep,
+    de: datetime | None = None,
+    ate: datetime | None = None,
+    dias: int = Query(default=60, ge=1, le=365),
+    uf: list[str] | None = Query(default=None),
+    esfera: list[str] | None = Query(default=None),
+    categoria: list[str] | None = Query(default=None),
+) -> Response:
+    """A mesma agenda em .ics -- inclusive filtrada por categoria de bem."""
+    filtro = FiltroAgenda(
+        de=de,
+        ate=ate,
+        dias=dias,
+        ufs=[u.upper() for u in (uf or [])],
+        esferas=[EsferaJustica(e) for e in (esfera or [])],
+        categorias=list(categoria or []),
+    )
+    agenda_montada = montar_agenda(sessao, filtro)
+    # Exatamente os eventos que a tela mostrou -- nem o lote inteiro, nem a
+    # janela toda. Um .ics com eventos que a lista nao trazia faria o usuario
+    # duvidar dos dois.
+    mostrados = {
+        (item.lote_id, item.tipo_evento)
+        for dia in agenda_montada.dias
+        for item in dia.itens
+    }
+    ids = {lote_id for lote_id, _ in mostrados}
+    eventos = [
+        e
+        for e in sessao.scalars(
+            select(EventoCalendario)
+            .where(EventoCalendario.lote_id.in_(ids or {0}))
+            .order_by(EventoCalendario.data_hora)
+        )
+        if (e.lote_id, str(e.tipo)) in mostrados
+    ]
+    return Response(
+        content=ics.gerar(eventos, nome="Radar Leilão — agenda"),
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="radar-agenda.ics"'},
+    )
+
+
+@publico.get("/diarios/publicacoes", response_model=schemas.PaginaPublicacoes)
+def publicacoes(
+    sessao: SessaoDep,
+    diario: list[str] | None = Query(default=None),
+    uf: list[str] | None = Query(default=None),
+    esfera: list[str] | None = Query(default=None),
+    somente_detectadas: bool = True,
+    revisao_necessaria: bool | None = None,
+    de: datetime | None = None,
+    ate: datetime | None = None,
+    pagina: int = Query(default=1, ge=1),
+    tamanho: int = Query(default=50, ge=1, le=200),
+) -> schemas.PaginaPublicacoes:
+    """O que foi lido do Diário da Justiça, detectado como leilão ou não.
+
+    As não detectadas ficam acessíveis de propósito: é o único jeito de alguém
+    conferir se o limiar de detecção está engolindo leilão de verdade.
+    """
+    consulta = select(PublicacaoDiario).order_by(
+        PublicacaoDiario.data_publicacao.desc(), PublicacaoDiario.id.desc()
+    )
+    if diario:
+        consulta = consulta.where(PublicacaoDiario.diario_slug.in_(diario))
+    if uf:
+        consulta = consulta.where(PublicacaoDiario.uf.in_([u.upper() for u in uf]))
+    if esfera:
+        consulta = consulta.where(PublicacaoDiario.esfera.in_(esfera))
+    if somente_detectadas:
+        consulta = consulta.where(PublicacaoDiario.detectado_como_leilao.is_(True))
+    if revisao_necessaria is not None:
+        consulta = consulta.where(
+            PublicacaoDiario.revisao_necessaria.is_(revisao_necessaria)
+        )
+    if de:
+        consulta = consulta.where(PublicacaoDiario.data_publicacao >= de)
+    if ate:
+        consulta = consulta.where(PublicacaoDiario.data_publicacao <= ate)
+
+    todas = list(sessao.scalars(consulta))
+    inicio = (pagina - 1) * tamanho
+    return schemas.PaginaPublicacoes(
+        itens=[
+            schemas.PublicacaoResposta.model_validate(p)
+            for p in todas[inicio : inicio + tamanho]
+        ],
+        total=len(todas),
+        detectadas=sum(1 for p in todas if p.detectado_como_leilao),
+        pagina=pagina,
+        tamanho=tamanho,
+    )
 
 
 # ---------------------------------------------------------------------------

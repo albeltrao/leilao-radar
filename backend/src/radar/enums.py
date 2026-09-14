@@ -25,6 +25,32 @@ class TipoBem(StrEnum):
     OUTRO = "OUTRO"
 
 
+class NaturezaBem(StrEnum):
+    """Movel ou imovel, no sentido dos arts. 79 a 84 do Codigo Civil.
+
+    Eixo diferente de ``TipoBem``: um trator e TipoBem.OUTRO e NaturezaBem.MOVEL,
+    e um terreno e IMOVEL nos dois. A separacao existe porque a agenda pedida e
+    "moveis e imoveis", e derivar isso de TipoBem jogaria toda a categoria OUTRO
+    (maquinario, semovente, joia) num balaio sem natureza.
+    """
+
+    IMOVEL = "IMOVEL"
+    MOVEL = "MOVEL"
+    INDEFINIDA = "INDEFINIDA"
+
+
+class ZonaImovel(StrEnum):
+    """Rural ou urbano. So faz sentido para NaturezaBem.IMOVEL.
+
+    INDEFINIDA nao e um defeito a esconder: publicacao de diario costuma citar o
+    bem em uma linha, e inventar "urbano" porque ha um nome de rua seria opinar.
+    """
+
+    URBANA = "URBANA"
+    RURAL = "RURAL"
+    INDEFINIDA = "INDEFINIDA"
+
+
 class StatusLote(StrEnum):
     ABERTO = "ABERTO"
     SUSPENSO = "SUSPENSO"
@@ -69,6 +95,7 @@ class StatusEvento(StrEnum):
 
 class TipoDocumento(StrEnum):
     EDITAL = "EDITAL"
+    PUBLICACAO_DIARIO = "PUBLICACAO_DIARIO"
     MATRICULA = "MATRICULA"
     LAUDO = "LAUDO"
     CERTIDAO = "CERTIDAO"
@@ -105,8 +132,17 @@ class JuntaComercial(StrEnum):
     JUCESE = "JUCESE"
 
 
+class EsferaJustica(StrEnum):
+    """Justica estadual ou federal. O diario e publicado por esfera."""
+
+    ESTADUAL = "ESTADUAL"
+    FEDERAL = "FEDERAL"
+    DESCONHECIDA = "DESCONHECIDA"
+
+
 class TipoFonte(StrEnum):
     TRIBUNAL = "TRIBUNAL"
+    DIARIO_OFICIAL = "DIARIO_OFICIAL"
     JUNTA_COMERCIAL = "JUNTA_COMERCIAL"
     LEILOEIRO = "LEILOEIRO"
     PROCESSUAL = "PROCESSUAL"

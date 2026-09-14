@@ -64,6 +64,29 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_max_caracteres: int = 120_000
 
+    # --- Diario da Justica ---------------------------------------------------
+    diario_limiar_deteccao: float = Field(
+        default=0.55,
+        description=(
+            "Confianca minima para tratar uma publicacao do diario como leilao. "
+            "Abaixo disso a publicacao fica guardada, mas nao vira lote. Baixar o "
+            "limiar aumenta falso positivo; subir esconde leilao real -- os dois "
+            "numeros aparecem no painel de fontes."
+        ),
+    )
+    diario_max_caracteres_texto: int = Field(
+        default=4000,
+        description=(
+            "Quanto do texto da publicacao e guardado. LGPD (secao 11): o diario "
+            "cita as partes, entao guardamos o recorte que sustenta a deteccao e "
+            "nao o caderno inteiro. CPF e removido antes, sempre."
+        ),
+    )
+    diario_dias_retroativos: int = Field(
+        default=3,
+        description="Janela de dias relida a cada coleta; a repeticao e idempotente.",
+    )
+
     # --- Mercado -------------------------------------------------------------
     fipe_provider: str = Field(default="espelho", description="espelho | fipe_api_br")
     fipe_api_base: str = "https://fipe.api.br/api/v1"
