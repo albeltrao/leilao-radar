@@ -1,6 +1,15 @@
 /** Tipos espelhando os schemas da API (backend/src/radar/api/schemas.py). */
 
 export type TipoBem = "IMOVEL" | "VEICULO" | "OUTRO";
+export type NaturezaBem = "IMOVEL" | "MOVEL" | "INDEFINIDA";
+export type ZonaImovel = "URBANA" | "RURAL" | "INDEFINIDA";
+export type Esfera = "ESTADUAL" | "FEDERAL" | "DESCONHECIDA";
+export type CategoriaBem =
+  | "IMOVEL_URBANO"
+  | "IMOVEL_RURAL"
+  | "IMOVEL_INDEFINIDO"
+  | "MOVEL"
+  | "INDEFINIDO";
 export type Faixa = "ALTA" | "BOA" | "MODERADA" | "BAIXA" | "INDEFINIDA";
 
 export interface ComponenteScore {
@@ -36,6 +45,9 @@ export interface LoteResumo {
   id: number;
   titulo: string;
   tipo_bem: TipoBem;
+  natureza_bem: NaturezaBem;
+  zona_imovel: ZonaImovel;
+  esfera: Esfera;
   status: string;
   numero_lote: string | null;
   numero_processo: string | null;
@@ -179,6 +191,8 @@ export interface Facetas {
   ufs: string[];
   cidades: { uf: string; cidade: string; total: number }[];
   tipos_bem: { valor: string; total: number }[];
+  categorias_bem: { valor: CategoriaBem; rotulo: string; total: number }[];
+  esferas: { valor: string; total: number }[];
   status: { valor: string; total: number }[];
   leiloeiros: Leiloeiro[];
   faixa_valores: { minimo: string | null; maximo: string | null };
@@ -217,6 +231,9 @@ export interface FiltroBusca {
   uf?: string[];
   cidade?: string[];
   tipo_bem?: string[];
+  natureza_bem?: string[];
+  zona_imovel?: string[];
+  esfera?: string[];
   status?: string[];
   valor_minimo?: number;
   valor_maximo?: number;
@@ -248,4 +265,112 @@ export interface GeoFeicao {
     proxima_praca_ordem: number | null;
     precisao: string | null;
   };
+}
+
+
+/* -- Diário da Justiça e agenda por tipo de bem -------------------------- */
+
+export interface ProcedenciaDiario {
+  slug: string;
+  nome: string;
+  esfera: Esfera;
+  publicado_em: string | null;
+  url: string | null;
+  confianca: number;
+  /** Trecho literal da publicação que sustentou a detecção. */
+  evidencia: string | null;
+  revisao_necessaria: boolean;
+}
+
+export interface ItemAgenda {
+  lote_id: number;
+  titulo: string;
+  categoria: CategoriaBem;
+  categoria_rotulo: string;
+  natureza_bem: NaturezaBem;
+  zona_imovel: ZonaImovel;
+  tipo_bem: TipoBem;
+  esfera: Esfera;
+  tipo_evento: string;
+  status_evento: string;
+  data_hora: string;
+  estimado: boolean;
+  uf: string | null;
+  cidade: string | null;
+  comarca: string | null;
+  tribunal_sigla: string | null;
+  numero_processo: string | null;
+  leiloeiro: string | null;
+  valor_avaliacao: number | null;
+  valor_minimo: number | null;
+  confianca_natureza: number;
+  evidencia_natureza: string | null;
+  confianca_zona: number;
+  evidencia_zona: string | null;
+  diario: ProcedenciaDiario | null;
+}
+
+export interface ContagemCategoria {
+  chave: CategoriaBem;
+  rotulo: string;
+  total: number;
+}
+
+export interface DiaAgenda {
+  data: string;
+  total: number;
+  itens: ItemAgenda[];
+}
+
+export interface Agenda {
+  de: string;
+  ate: string;
+  total: number;
+  total_de_diario: number;
+  categorias: ContagemCategoria[];
+  dias: DiaAgenda[];
+  disclaimer: string;
+}
+
+export interface FiltroAgenda {
+  de?: string;
+  ate?: string;
+  dias?: number;
+  uf?: string[];
+  esfera?: string[];
+  categoria?: string[];
+  somente_de_diario?: boolean;
+  incluir_prazos?: boolean;
+}
+
+export interface PublicacaoDiario {
+  id: number;
+  diario_slug: string;
+  diario_nome: string;
+  identificador: string;
+  esfera: Esfera;
+  tribunal_sigla: string | null;
+  uf: string | null;
+  caderno: string | null;
+  numero_edicao: string | null;
+  data_publicacao: string | null;
+  numero_processo: string | null;
+  orgao: string | null;
+  municipio: string | null;
+  detectado_como_leilao: boolean;
+  confianca_deteccao: number;
+  termos_deteccao: string[] | null;
+  evidencia: string | null;
+  revisao_necessaria: boolean;
+  lote_id: number | null;
+  fonte_url: string | null;
+  coletado_em: string;
+}
+
+export interface PaginaPublicacoes {
+  itens: PublicacaoDiario[];
+  total: number;
+  detectadas: number;
+  pagina: number;
+  tamanho: number;
 }

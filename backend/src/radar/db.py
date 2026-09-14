@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, create_engine, event, inspect
 from sqlalchemy.orm import Session, sessionmaker
 
 from radar.config import Settings, get_settings
@@ -70,8 +70,44 @@ def sessao() -> Iterator[Session]:
         s.close()
 
 
+class SchemaDesatualizado(RuntimeError):
+    """O banco existe, mas nao tem as colunas que o codigo atual espera."""
+
+
 def criar_schema(settings: Settings | None = None) -> None:
-    Base.metadata.create_all(get_engine(settings))
+    engine = get_engine(settings)
+    Base.metadata.create_all(engine)
+    _conferir_colunas(engine)
+
+
+def _conferir_colunas(engine: Engine) -> None:
+    """Detecta banco antigo depois de um campo novo no modelo.
+
+    ``create_all`` cria tabela que falta, mas NAO acrescenta coluna a tabela que
+    ja existe. Sem esta checagem, um banco criado por uma versao anterior falha
+    la na frente com "no such column: lote.natureza_bem", no meio de uma consulta
+    da API -- longe da causa e sem dizer o que fazer. Enquanto nao houver Alembic
+    (ver docs/adr/0002), o conserto e recriar o banco, e a mensagem diz isso.
+    """
+    inspetor = inspect(engine)
+    faltando: list[str] = []
+    for tabela in Base.metadata.sorted_tables:
+        if not inspetor.has_table(tabela.name):
+            continue
+        existentes = {c["name"] for c in inspetor.get_columns(tabela.name)}
+        faltando += [
+            f"{tabela.name}.{coluna.name}"
+            for coluna in tabela.columns
+            if coluna.name not in existentes
+        ]
+    if faltando:
+        raise SchemaDesatualizado(
+            "o banco foi criado por uma versao anterior e nao tem estas colunas: "
+            + ", ".join(sorted(faltando))
+            + ". Ainda nao ha migracao versionada neste projeto: apague o banco "
+            "(`make limpar`) e recrie com `radar criar-schema` -- ou, se os dados "
+            "importam, exporte antes."
+        )
 
 
 def resetar_estado_global() -> None:

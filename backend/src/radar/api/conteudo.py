@@ -137,6 +137,25 @@ PASSOS = [
         ),
         "atencao": "O simulador cobre lance, comissão e débitos citados. O resto é com você.",
     },
+    {
+        "chave": "diario",
+        "titulo": "Onde o Radar descobre o leilão",
+        "resumo": "No Diário da Justiça, antes de o leilão aparecer em qualquer site.",
+        "detalhe": (
+            "Todo leilão judicial é anunciado por edital publicado no Diário da "
+            "Justiça. Desde a Resolução CNJ nº 455/2022 os tribunais publicam no "
+            "Diário de Justiça Eletrônico Nacional, que reúne a Justiça Estadual e "
+            "a Justiça Federal. O Radar lê esse diário todos os dias, identifica "
+            "quais publicações anunciam leilão e separa os bens em móveis e "
+            "imóveis, e os imóveis em rurais e urbanos."
+        ),
+        "atencao": (
+            "A identificação é automática e vem sempre com o trecho da publicação "
+            "que a motivou. Se o trecho não convencer você, ele é justamente o que "
+            "há para conferir: clique em \"por que está nesta categoria?\" e leia. "
+            "O documento que vale continua sendo o edital completo."
+        ),
+    },
 ]
 
 REFERENCIAS = [
@@ -149,6 +168,14 @@ REFERENCIAS = [
         "titulo": "CPC, arts. 879 a 903",
         "descricao": "Regras da alienação em leilão judicial, preço vil e parcelamento.",
         "url": "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2015/lei/l13105.htm",
+    },
+    {
+        "titulo": "Resolução CNJ nº 455/2022",
+        "descricao": (
+            "Institui o Diário de Justiça Eletrônico Nacional, onde os tribunais "
+            "estaduais e federais publicam os editais de leilão."
+        ),
+        "url": "https://atos.cnj.jus.br/atos/detalhar/4563",
     },
     {
         "titulo": "CTN, art. 130",

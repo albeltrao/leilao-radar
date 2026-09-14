@@ -1,0 +1,16 @@
+{
+  "status": "success",
+  "count": 1,
+  "items": [
+    {
+      "id": 99001122,
+      "siglaTribunal": "TRF5",
+      "tipoComunicacao": "Edital",
+      "nomeOrgao": "12ª Vara Federal da Seção Judiciária de Pernambuco",
+      "numeroprocessocommascara": "0800123-16.2026.4.05.8200",
+      "data_disponibilizacao": "18/09/2026",
+      "link": "https://comunica.pje.jus.br/consulta/99001122",
+      "texto": "EDITAL DE LEILÃO. A Justiça Federal, por meio da 12ª Vara Federal da Seção Judiciária de Pernambuco, nos autos da execução fiscal nº 0800123-16.2026.4.05.8200, FAZ SABER que será realizado leilão judicial eletrônico dos BENS: veículo automóvel marca Volkswagen, modelo Delivery 9.170, ano de fabricação 2016, ano modelo 2017, placa PQR2A34, chassi 9BWZZZ377VT004251, avaliado em R$ 132.000,00. A 1ª praça será em 20/05/2027, às 09h30, e a 2ª praça em 03/06/2027, às 09h30, não se admitindo lance inferior a 50% da avaliação. Leiloeiro público oficial MARCOS VINÍCIUS ANDRADE, matrícula JUCEPE nº 05/2018."
+    }
+  ]
+}

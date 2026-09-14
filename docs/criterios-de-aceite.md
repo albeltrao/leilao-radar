@@ -16,6 +16,8 @@ rede para os domínios dos tribunais e das juntas comerciais).
 | 7 | Alertas por e-mail configuráveis por filtro salvo | **Feito** | Falta apenas apontar `RADAR_EMAIL_BACKEND=smtp` para um servidor real |
 | 8 | Painel visual com a diretriz da seção 10, responsivo e com modo claro/escuro | **Feito** | — |
 | 9 | Disclaimers legais visíveis conforme seção 11 | **Feito** | — |
+| 10 | Leitura do Diário da Justiça (estadual e federal) com destaque dos leilões detectados | **Parcial** | Detector, classificador, seis conectores DJEN (TJAL/TJBA/TJPE/TJSE/TRF1/TRF5), persistência e tela prontos e testados offline. Falta conferir o contrato da API Comunica do CNJ contra uma resposta real e calibrar o limiar com diário de verdade |
+| 11 | Organização cronológica e por tipo de bem — móveis, imóveis, rurais e urbanos | **Feito** | `/api/agenda` devolve a lista por dia e as contagens por categoria no mesmo payload; a mesma agenda sai em `.ics` e por `radar diarios agenda`. `INDEFINIDA` é faixa própria, não é escondida |
 
 ## O caminho crítico para fechar o MVP
 
@@ -25,7 +27,8 @@ conectores contra as fontes reais, a partir de um ambiente com saída de rede.
 ```bash
 for fonte in tjal-banco-leiloeiros tjse-leiloeiros-credenciados \
              tjse-leilao-judicial tjpe-leiloes-judiciais \
-             juceal-leiloeiros jucese-leiloeiros jucepe-leiloeiros; do
+             juceal-leiloeiros jucese-leiloeiros jucepe-leiloeiros \
+             djen-tjal djen-tjba djen-tjpe djen-tjse djen-trf1 djen-trf5; do
   radar fontes validar --fonte "$fonte"
 done
 ```
@@ -37,6 +40,13 @@ dos parsers (que procura "a tabela cujo cabeçalho fala de matrícula", em vez d
 um caminho CSS fixo) existe justamente para reduzir esse trabalho e, depois,
 sobreviver a redesigns.
 
+Os seis `djen-*` têm um passo a mais depois da validação: rodar
+`radar diarios coletar --incluir-nao-validados` por alguns dias e ler o que ficou
+de fora com `radar diarios publicacoes --todas`. Se aparecer edital de leilão
+entre as descartadas, o limiar (`RADAR_DIARIO_LIMIAR_DETECCAO`) está alto demais;
+se aparecer intimação comum entre as detectadas, está baixo. Essa calibragem não
+tem como ser feita sem diário real.
+
 ## Fora do escopo declarado da v1
 
 Registrado aqui para não parecer esquecimento:
@@ -44,7 +54,11 @@ Registrado aqui para não parecer esquecimento:
 - **Camada de comparáveis de portais de anúncio** (OLX, VivaReal, Zap) — a
   seção 4.5 pede parceria ou API oficial antes de qualquer coleta. O enum
   `FonteMercado.COMPARAVEIS` está reservado, sem coletor.
-- **Justiça Federal, Justiça do Trabalho e leilões da União** — seção 2, fase futura.
+- **Justiça do Trabalho e leilões da União** — seção 2, fase futura. A **Justiça
+  Federal** saiu desta lista: TRF1 (Bahia) e TRF5 (Alagoas, Pernambuco e
+  Sergipe) entram pelo Diário da Justiça, com esfera marcada em cada lote e
+  filtro próprio na API e na tela. O que continua fora é o portal de leilões de
+  cada TRF e as plataformas de alienação da União — só o diário está coberto.
 - **Leilões extrajudiciais de bancos** — seção 2, fase futura.
 - **App mobile e canal WhatsApp** — seção 13, fase 4.
 - **Migrações versionadas (Alembic)** — o schema ainda muda a cada conector novo.

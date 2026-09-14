@@ -474,3 +474,39 @@ def test_lote_da_bahia_infere_tribunal_e_uf(sessao_db):
     assert lote.leilao.tribunal.sigla == "TJBA"
     # Geocodificado pelo centroide de Salvador.
     assert lote.latitude == pytest.approx(-12.9777)
+
+
+def test_banco_antigo_avisa_em_vez_de_falhar_no_meio_da_consulta(tmp_path, settings, monkeypatch):
+    """`create_all` cria tabela nova, mas não acrescenta coluna a tabela existente.
+
+    Sem a checagem, um banco de uma versão anterior só quebra lá na frente, com
+    "no such column: lote.natureza_bem" no meio de uma consulta da API — longe da
+    causa e sem dizer o que fazer.
+    """
+    import sqlite3
+
+    from radar import db as db_mod
+
+    caminho = tmp_path / "antigo.db"
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{caminho}")
+    db_mod.resetar_estado_global()
+    db_mod.criar_schema(settings)
+    db_mod.resetar_estado_global()
+
+    con = sqlite3.connect(caminho)
+    # Os índices que citam a coluna saem antes: o SQLite recusa o DROP COLUMN
+    # enquanto algum índice depender dela.
+    for (indice,) in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='lote' "
+        "AND sql LIKE '%natureza_bem%'"
+    ).fetchall():
+        con.execute(f"DROP INDEX {indice}")
+    con.execute("ALTER TABLE lote DROP COLUMN natureza_bem")
+    con.commit()
+    con.close()
+
+    with pytest.raises(db_mod.SchemaDesatualizado) as erro:
+        db_mod.criar_schema(settings)
+    assert "lote.natureza_bem" in str(erro.value)
+    assert "make limpar" in str(erro.value)
+    db_mod.resetar_estado_global()

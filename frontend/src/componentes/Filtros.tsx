@@ -24,7 +24,10 @@ export function Filtros({
   const alterar = (campo: keyof FiltroBusca, valor: unknown) =>
     aoMudar({ ...filtro, [campo]: valor, pagina: 1 });
 
-  const alternarLista = (campo: "uf" | "tipo_bem", valor: string) => {
+  const alternarLista = (
+    campo: "uf" | "tipo_bem" | "natureza_bem" | "zona_imovel" | "esfera",
+    valor: string,
+  ) => {
     const atual = new Set(filtro[campo] ?? []);
     atual.has(valor) ? atual.delete(valor) : atual.add(valor);
     alterar(campo, atual.size ? [...atual] : undefined);
@@ -34,6 +37,9 @@ export function Filtros({
   const temFiltro =
     Boolean(filtro.uf?.length) ||
     Boolean(filtro.tipo_bem?.length) ||
+    Boolean(filtro.natureza_bem?.length) ||
+    Boolean(filtro.zona_imovel?.length) ||
+    Boolean(filtro.esfera?.length) ||
     Boolean(filtro.q) ||
     filtro.desconto_minimo !== undefined ||
     filtro.valor_maximo !== undefined ||
@@ -99,6 +105,54 @@ export function Filtros({
               <span className="pilula__contagem">{tipo.total}</span>
             </button>
           ))}
+        </fieldset>
+
+        {/* Os mesmos eixos da agenda: móvel/imóvel e, dentro de imóvel,
+            rural/urbano. A contagem sai das facetas, então uma faixa vazia não
+            é oferecida como se houvesse lote nela. */}
+        <fieldset className="grupo">
+          <legend>Natureza e zona</legend>
+          {[
+            ["natureza_bem", "MOVEL", "Móveis"],
+            ["natureza_bem", "IMOVEL", "Imóveis"],
+            ["zona_imovel", "URBANA", "Urbanos"],
+            ["zona_imovel", "RURAL", "Rurais"],
+          ].map(([campo, valor, rotulo]) => {
+            const chave = campo as "natureza_bem" | "zona_imovel";
+            const ativo = filtro[chave]?.includes(valor) ?? false;
+            return (
+              <button
+                key={`${campo}-${valor}`}
+                type="button"
+                className={`pilula ${ativo ? "esta-ativa" : ""}`}
+                aria-pressed={ativo}
+                onClick={() => alternarLista(chave, valor)}
+              >
+                {rotulo}
+              </button>
+            );
+          })}
+        </fieldset>
+
+        <fieldset className="grupo">
+          <legend>Esfera</legend>
+          {[
+            ["ESTADUAL", "Estadual"],
+            ["FEDERAL", "Federal"],
+          ].map(([valor, rotulo]) => {
+            const ativo = filtro.esfera?.includes(valor) ?? false;
+            return (
+              <button
+                key={valor}
+                type="button"
+                className={`pilula ${ativo ? "esta-ativa" : ""}`}
+                aria-pressed={ativo}
+                onClick={() => alternarLista("esfera", valor)}
+              >
+                {rotulo}
+              </button>
+            );
+          })}
         </fieldset>
 
         <label className="campo campo--faixa">

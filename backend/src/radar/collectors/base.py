@@ -84,8 +84,10 @@ def carregar_todos() -> None:
         return
     _carregado = True
     from radar.collectors import datajud  # noqa: F401
+    from radar.collectors.diarios import registro as registro_diarios
     from radar.collectors.juntas import juceal, juceb, jucepe, jucese  # noqa: F401
     from radar.collectors.leiloeiros import declarativo  # noqa: F401
     from radar.collectors.tribunais import tjal, tjba, tjpe, tjse  # noqa: F401
 
     declarativo.registrar_perfis()
+    registro_diarios.registrar_diarios()

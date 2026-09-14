@@ -594,6 +594,60 @@ select:focus-visible,
   to { transform: translateY(105vh) rotate(540deg); opacity: 0; }
 }
 
+/* ------------------------------------------------- agenda dos diários ----- */
+
+.grupo__rotulo {
+  font-size: 0.82rem; color: var(--ink-2); margin-right: 4px;
+}
+.grupo--categorias { margin: 14px 0 4px; }
+.pilula--categoria:disabled { opacity: 0.45; cursor: default; }
+
+.agenda-dia {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  font-size: 1rem; margin: 0 0 10px;
+}
+.agenda-dia__total {
+  font-size: 0.78rem; font-weight: 600; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+.agenda-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.agenda-item {
+  display: grid; gap: 6px; padding: 12px 14px;
+  background: var(--superficie); border: 1px solid var(--borda);
+  border-left: 3px solid var(--marca);
+}
+@media (min-width: 640px) {
+  .agenda-item { grid-template-columns: 92px 1fr; gap: 14px; }
+}
+.agenda-item__hora {
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: 0.8rem; color: var(--ink-3);
+}
+.agenda-item__hora strong { font-family: var(--fonte-num); font-size: 1rem; color: var(--ink); }
+.agenda-item__corpo { display: grid; gap: 6px; min-width: 0; }
+.agenda-item__cabecalho {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.agenda-item__cabecalho a { font-weight: 600; }
+.agenda-item__meta, .agenda-item__diario {
+  margin: 0; font-size: 0.82rem; color: var(--ink-2);
+}
+.agenda-item__diario { color: var(--ink-3); }
+
+/* A prova fica recolhida: quem só quer a agenda não tropeça no trecho do
+   edital, e quem duvida da categoria abre e lê a frase que a gerou. */
+.procedencia { margin-top: 2px; }
+.procedencia__provas {
+  list-style: none; margin: 6px 0 0; padding: 10px 12px; display: grid; gap: 10px;
+  background: var(--superficie-2); border-radius: var(--raio);
+}
+.procedencia__provas li { display: grid; gap: 4px; }
+.procedencia__trecho {
+  display: block; font-size: 0.8rem; color: var(--ink-2); line-height: 1.5;
+  quotes: "\201C" "\201D";
+}
+
 /* ---------------------------------------------------------------- rodapé -- */
 
 .rodape { border-top: 1px solid var(--borda); background: var(--superficie); margin-top: 40px; }

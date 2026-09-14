@@ -257,20 +257,23 @@ def formatar_cnj(sequencial: str, ano: str, segmento: str, tribunal: str, origem
 
 
 def tribunal_do_cnj(numero: str | None) -> str | None:
-    """Deriva a sigla do TJ a partir do segmento J=8 (justica estadual) + TR."""
+    """Deriva a sigla do tribunal a partir do segmento J + codigo TR.
+
+    Cobre o segmento 8 (justica estadual, TJxx) e o segmento 4 (justica federal,
+    TRFn). O segmento tem de entrar na conta: o par TR 05 e TJBA no segmento 8 e
+    TRF5 no segmento 4, e os dois numeros passam no digito verificador.
+    """
     if not numero:
         return None
     digitos = re.sub(r"\D", "", numero)
     if len(digitos) != 20:
         return None
     segmento, tr = digitos[13], digitos[14:16]
-    if segmento != "8":
-        return None
     # Import local: jurisdicoes nao depende deste modulo, mas manter o import no
     # topo criaria acoplamento desnecessario para uma unica funcao.
     from radar.jurisdicoes import tribunal_por_codigo_tr  # noqa: PLC0415
 
-    return tribunal_por_codigo_tr(tr)
+    return tribunal_por_codigo_tr(tr, segmento)
 
 
 # ---------------------------------------------------------------------------

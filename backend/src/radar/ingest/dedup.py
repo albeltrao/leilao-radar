@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from radar.enums import TipoBem
+from radar.enums import EsferaJustica, NaturezaBem, TipoBem, ZonaImovel
 from radar.ingest.normalizador import LoteNormalizado
 from radar.models import Lote
 from radar.normalizacao import normalizar_texto
@@ -144,6 +144,28 @@ def mesclar(destino: Lote, norm: LoteNormalizado, prioridade_fonte: int) -> list
     if bruto.tipo_bem is not TipoBem.OUTRO and destino.tipo_bem is TipoBem.OUTRO:
         destino.tipo_bem = bruto.tipo_bem
         alteracoes.append("tipo_bem")
+
+    # Classificacao so preenche buraco: a fonte que ja tinha dito "imovel rural"
+    # com evidencia nao e rebaixada por outra fonte que so viu "imovel". A
+    # confianca e a evidencia de cada uma ficam em campo_extraido.
+    if (
+        norm.classificacao.natureza is not NaturezaBem.INDEFINIDA
+        and destino.natureza_bem is NaturezaBem.INDEFINIDA
+    ):
+        destino.natureza_bem = norm.classificacao.natureza
+        alteracoes.append("natureza_bem")
+    if (
+        norm.classificacao.zona is not ZonaImovel.INDEFINIDA
+        and destino.zona_imovel is ZonaImovel.INDEFINIDA
+    ):
+        destino.zona_imovel = norm.classificacao.zona
+        alteracoes.append("zona_imovel")
+    if (
+        norm.esfera is not EsferaJustica.DESCONHECIDA
+        and destino.esfera is EsferaJustica.DESCONHECIDA
+    ):
+        destino.esfera = norm.esfera
+        alteracoes.append("esfera")
 
     if bruto.fotos and not destino.fotos:
         destino.fotos = list(bruto.fotos)

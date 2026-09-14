@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 TOPICO_LOTES = "lotes"
 TOPICO_LEILOEIROS = "leiloeiros"
 TOPICO_DOCUMENTOS = "documentos"
+TOPICO_PUBLICACOES = "publicacoes"
 
 
 @dataclass(slots=True)

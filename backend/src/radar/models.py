@@ -32,10 +32,12 @@ from sqlalchemy.types import TypeDecorator
 
 from radar.enums import (
     CanalAlerta,
+    EsferaJustica,
     FonteMercado,
     JuntaComercial,
     MetodoExtracao,
     ModalidadeLeilao,
+    NaturezaBem,
     OrigemTexto,
     StatusColeta,
     StatusEvento,
@@ -46,6 +48,7 @@ from radar.enums import (
     TipoDocumento,
     TipoEvento,
     TipoFonte,
+    ZonaImovel,
 )
 
 
@@ -267,6 +270,8 @@ class Lote(Base, CarimboTempo):
     __table_args__ = (
         Index("ix_lote_busca", "uf", "cidade", "tipo_bem", "status"),
         Index("ix_lote_geo", "latitude", "longitude"),
+        # A agenda por tipo de bem filtra sempre por estes tres juntos.
+        Index("ix_lote_categoria", "natureza_bem", "zona_imovel", "status"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -280,6 +285,19 @@ class Lote(Base, CarimboTempo):
     # por processo o tempo todo, e um join por linha sairia caro.
     numero_processo: Mapped[str | None] = mapped_column(String(25), index=True)
     tipo_bem: Mapped[TipoBem] = mapped_column(EnumTexto(TipoBem), index=True, default=TipoBem.OUTRO)
+    # Eixo "movel x imovel" e, sendo imovel, "rural x urbano". Derivados por
+    # regra a partir do texto: a evidencia e a confianca de cada um estao em
+    # campo_extraido sob os nomes natureza_bem e zona_imovel. INDEFINIDA e um
+    # resultado legitimo -- ver radar/diarios/classificacao.py.
+    natureza_bem: Mapped[NaturezaBem] = mapped_column(
+        EnumTexto(NaturezaBem), index=True, default=NaturezaBem.INDEFINIDA
+    )
+    zona_imovel: Mapped[ZonaImovel] = mapped_column(
+        EnumTexto(ZonaImovel), index=True, default=ZonaImovel.INDEFINIDA
+    )
+    esfera: Mapped[EsferaJustica] = mapped_column(
+        EnumTexto(EsferaJustica), index=True, default=EsferaJustica.DESCONHECIDA
+    )
     titulo: Mapped[str] = mapped_column(String(300))
     descricao: Mapped[str | None] = mapped_column(Text)
     status: Mapped[StatusLote] = mapped_column(EnumTexto(StatusLote), default=StatusLote.ABERTO, index=True)
@@ -351,6 +369,68 @@ class Lote(Base, CarimboTempo):
     eventos: Mapped[list[EventoCalendario]] = relationship(
         back_populates="lote", cascade="all, delete-orphan"
     )
+    publicacoes: Mapped[list[PublicacaoDiario]] = relationship(
+        back_populates="lote", order_by="PublicacaoDiario.data_publicacao"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Diario da Justica (secao 4.1, esfera estadual e federal)
+# ---------------------------------------------------------------------------
+
+
+class PublicacaoDiario(Base, CarimboTempo):
+    """Uma publicacao lida do Diario da Justica, detectada como leilao ou nao.
+
+    Guardamos tambem as NAO detectadas (``detectado_como_leilao=False``) por dois
+    motivos praticos: sem elas nao da para medir falso negativo do detector, e a
+    coleta do dia seguinte reprocessaria o mesmo caderno inteiro.
+
+    LGPD (secao 11): o diario cita as partes do processo. CPF e removido antes de
+    gravar e o texto e truncado no recorte que sustenta a deteccao -- nao
+    arquivamos o caderno completo.
+    """
+
+    __tablename__ = "publicacao_diario"
+    __table_args__ = (
+        UniqueConstraint("diario_slug", "identificador", name="uq_publicacao_diario"),
+        Index("ix_publicacao_agenda", "data_publicacao", "detectado_como_leilao"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    diario_slug: Mapped[str] = mapped_column(String(80), index=True)
+    diario_nome: Mapped[str] = mapped_column(String(200))
+    # Numero da comunicacao no diario. E o que torna a coleta idempotente.
+    identificador: Mapped[str] = mapped_column(String(140))
+    esfera: Mapped[EsferaJustica] = mapped_column(
+        EnumTexto(EsferaJustica), index=True, default=EsferaJustica.DESCONHECIDA
+    )
+    tribunal_sigla: Mapped[str | None] = mapped_column(String(10), index=True)
+    uf: Mapped[str | None] = mapped_column(String(2), index=True)
+    caderno: Mapped[str | None] = mapped_column(String(120))
+    numero_edicao: Mapped[str | None] = mapped_column(String(40))
+    data_publicacao: Mapped[datetime | None] = mapped_column(UtcDateTime, index=True)
+    data_divulgacao: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    numero_processo: Mapped[str | None] = mapped_column(String(25), index=True)
+    orgao: Mapped[str | None] = mapped_column(String(240))
+    municipio: Mapped[str | None] = mapped_column(String(160))
+    texto: Mapped[str | None] = mapped_column(Text)
+
+    detectado_como_leilao: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    confianca_deteccao: Mapped[float] = mapped_column(default=0.0)
+    termos_deteccao: Mapped[list | None] = mapped_column(JSON, default=list)
+    evidencia: Mapped[str | None] = mapped_column(
+        Text, doc="Trecho literal da publicacao que sustentou a deteccao."
+    )
+    revisao_necessaria: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    versao_detector: Mapped[str | None] = mapped_column(String(20))
+
+    lote_id: Mapped[int | None] = mapped_column(ForeignKey("lote.id", ondelete="SET NULL"))
+    fonte_slug: Mapped[str] = mapped_column(String(80), index=True)
+    fonte_url: Mapped[str | None] = mapped_column(String(700))
+    coletado_em: Mapped[datetime] = mapped_column(UtcDateTime, default=agora)
+
+    lote: Mapped[Lote | None] = relationship(back_populates="publicacoes")
 
 
 # ---------------------------------------------------------------------------

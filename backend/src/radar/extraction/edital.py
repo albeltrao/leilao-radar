@@ -5,10 +5,11 @@ fixa, e regra e auditavel, reproduzivel, gratuita e instantanea. O modelo de
 linguagem entra depois, para o que a regra nao pegou e para conferir o que ela
 pegou (ver ``merge.py``).
 
-Todo casamento roda sobre uma copia do texto sem acento e em minusculas. Como
-remover acento preserva o comprimento da string, os offsets continuam validos e
-a evidencia e recortada do texto ORIGINAL -- o usuario le o trecho como esta no
-edital, com acento e maiuscula.
+Todo casamento roda sobre uma copia do texto sem acento e em minusculas, e a
+evidencia e recortada do texto ORIGINAL -- o usuario le o trecho como esta no
+edital, com acento e maiuscula. Quem garante que os offsets batem nos dois e o
+``Contexto`` de campos.py; leia o docstring de ``contexto()`` antes de confiar
+neles em codigo novo.
 
 ARMADILHA ao escrever padrao novo: a normalizacao NFKD tambem converte os
 indicadores ordinais. "nº" vira "no", "1ª" vira "1a" e "2º" vira "2o" ANTES de o
@@ -24,14 +25,15 @@ um fato; "voce nao vai pagar o IPTU atrasado" seria parecer juridico, e a secao
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 
 from radar.extraction.campos import (
     CONF_INFERIDO,
     CONF_ROTULO_AMBIGUO,
     CONF_ROTULO_EXPLICITO,
     Achado,
+    Contexto,
     ResultadoExtracao,
+    contexto,
 )
 from radar.normalizacao import (
     extrair_numero_cnj,
@@ -40,7 +42,6 @@ from radar.normalizacao import (
     parse_data_hora,
     parse_moeda,
     parse_percentual,
-    remover_acentos,
 )
 
 VERSAO_PARSER = "1.0"
@@ -48,25 +49,11 @@ VERSAO_PARSER = "1.0"
 _MOEDA = r"R\$\s*([\d][\d.\s]*,\d{2}|[\d][\d.\s]*)"
 
 
-@dataclass(slots=True)
-class _Contexto:
-    original: str
-    busca: str  # mesma string, sem acento e minuscula (offsets identicos)
-
-    def evidencia(self, inicio: int, fim: int, margem: int = 110) -> str:
-        trecho = self.original[max(0, inicio - margem) : min(len(self.original), fim + margem)]
-        return limpar_espacos(trecho) or ""
-
-
-def _contexto(texto: str) -> _Contexto:
-    return _Contexto(original=texto, busca=remover_acentos(texto).lower())
-
-
-def _buscar(ctx: _Contexto, padrao: str) -> list[re.Match]:
+def _buscar(ctx: Contexto, padrao: str) -> list[re.Match]:
     return list(re.finditer(padrao, ctx.busca, re.IGNORECASE | re.DOTALL))
 
 
-def _primeiro(ctx: _Contexto, padroes: list[str]) -> tuple[re.Match, int] | None:
+def _primeiro(ctx: Contexto, padroes: list[str]) -> tuple[re.Match, int] | None:
     """Primeiro padrao que casar, na ordem de confiabilidade dada."""
     for indice, padrao in enumerate(padroes):
         achados = _buscar(ctx, padrao)
@@ -84,7 +71,7 @@ class ParserEdital:
             resultado.avisos.append("texto do edital vazio ou curto demais para extrair")
             return resultado
 
-        ctx = _contexto(texto)
+        ctx = contexto(texto)
         for extrator in (
             self._processo,
             self._comarca_e_vara,
@@ -109,7 +96,7 @@ class ParserEdital:
 
     # -- identificacao processual ------------------------------------------
 
-    def _processo(self, ctx: _Contexto) -> list[Achado]:
+    def _processo(self, ctx: Contexto) -> list[Achado]:
         numero = extrair_numero_cnj(ctx.original)
         if not numero:
             return []
@@ -123,7 +110,7 @@ class ParserEdital:
             )
         ]
 
-    def _comarca_e_vara(self, ctx: _Contexto) -> list[Achado]:
+    def _comarca_e_vara(self, ctx: Contexto) -> list[Achado]:
         achados: list[Achado] = []
         m = _primeiro(
             ctx,
@@ -164,7 +151,7 @@ class ParserEdital:
             )
         return achados
 
-    def _leiloeiro(self, ctx: _Contexto) -> list[Achado]:
+    def _leiloeiro(self, ctx: Contexto) -> list[Achado]:
         achados: list[Achado] = []
         m = _primeiro(
             ctx,
@@ -183,19 +170,34 @@ class ParserEdital:
                     evidencia=ctx.evidencia(match.start(), match.end()),
                 )
             )
+        # ARMADILHA: "matricula" sozinho casa antes com a matricula do IMOVEL --
+        # "matricula 12.345 do 2o Oficio" vinha parar aqui e era exibida como a
+        # credencial do leiloeiro. O rotulo so vale quando a junta esta nomeada
+        # ou quando a palavra "leiloeiro" esta por perto; sem isso, campo vazio,
+        # que e melhor que uma credencial errada na tela.
         m = _primeiro(
             ctx,
             [
-                r"(?:matricula|jucea?l?|jucese|jucepe|jucesp)\s*(?:n?[oº°.]?\s*)?([\d./-]{2,15})",
+                # O grupo termina em digito de proposito: sem isso o ponto final
+                # da frase entrava na matricula ("12/2019.").
+                r"(?:juceal|jucese|jucepe|juceb|jucesp|jucerja|jucemg)\s*"
+                r"(?:sob\s+)?(?:n?[oº°.]?\s*)?([\d./-]{1,14}\d)",
+                r"matricula\s+(?:d[oa]\s+)?leiloeir[oa][^\d]{0,20}([\d./-]{1,14}\d)",
+                # (?!\n\s*\n) impede atravessar paragrafo: dentro do mesmo bloco,
+                # "matricula" depois de "leiloeiro" e do leiloeiro; no bloco
+                # seguinte ("DO BEM:") ja e a matricula do imovel. Nao da para
+                # usar [^.] porque "Sra." tem ponto e fica no meio da frase.
+                r"leiloeir[oa](?:(?!\n\s*\n).){0,130}?matricula\s*"
+                r"(?:n?[oº°.]?\s*)?([\d./-]{1,14}\d)",
             ],
         )
         if m:
-            match, _ = m
+            match, indice = m
             achados.append(
                 Achado(
                     nome="leiloeiro_matricula",
                     valor_texto=limpar_espacos(ctx.original[match.start(1) : match.end(1)]),
-                    confianca=CONF_ROTULO_AMBIGUO,
+                    confianca=CONF_ROTULO_EXPLICITO if indice < 2 else CONF_ROTULO_AMBIGUO,
                     evidencia=ctx.evidencia(match.start(), match.end()),
                 )
             )
@@ -203,7 +205,7 @@ class ParserEdital:
 
     # -- valores -----------------------------------------------------------
 
-    def _valor_avaliacao(self, ctx: _Contexto) -> list[Achado]:
+    def _valor_avaliacao(self, ctx: Contexto) -> list[Achado]:
         padroes = [
             rf"valor\s+d[ae]\s+avaliacao[^\d\n]{{0,40}}{_MOEDA}",
             rf"avaliad[oa]s?\s+(?:em|por)\s+{_MOEDA}",
@@ -242,7 +244,7 @@ class ParserEdital:
             )
         ]
 
-    def _pracas(self, ctx: _Contexto) -> list[Achado]:
+    def _pracas(self, ctx: Contexto) -> list[Achado]:
         achados: list[Achado] = []
         ordens = (
             (1, r"(?:1[ªa°º]|primeir[ao])\s*(?:praca|leilao|hasta|data)"),
@@ -303,7 +305,7 @@ class ParserEdital:
                     )
         return achados
 
-    def _percentual_minimo(self, ctx: _Contexto) -> list[Achado]:
+    def _percentual_minimo(self, ctx: Contexto) -> list[Achado]:
         padroes = [
             r"nao\s+(?:sera|podera\s+ser|serao)\s+(?:aceito|admitido)?s?\s*"
             r"(?:lance|valor)?[^%\n]{0,60}inferior\s+a\s+(\d{1,3}(?:[.,]\d+)?)\s*%",
@@ -326,7 +328,7 @@ class ParserEdital:
             )
         ]
 
-    def _comissao(self, ctx: _Contexto) -> list[Achado]:
+    def _comissao(self, ctx: Contexto) -> list[Achado]:
         m = _primeiro(
             ctx,
             [
@@ -352,7 +354,7 @@ class ParserEdital:
 
     # -- descricao do bem --------------------------------------------------
 
-    def _imovel(self, ctx: _Contexto) -> list[Achado]:
+    def _imovel(self, ctx: Contexto) -> list[Achado]:
         achados: list[Achado] = []
         # A matricula do IMOVEL e a matricula do LEILOEIRO usam a mesma palavra, e
         # a do leiloeiro costuma aparecer primeiro no edital. Por isso exigimos
@@ -453,7 +455,7 @@ class ParserEdital:
                     )
         return achados
 
-    def _ocupacao(self, ctx: _Contexto) -> list[Achado]:
+    def _ocupacao(self, ctx: Contexto) -> list[Achado]:
         """Ocupacao e um dos maiores fatores de risco -- e "desocupado" contem
         "ocupado", entao a ordem dos testes importa."""
         desocupado = _primeiro(
@@ -516,7 +518,7 @@ class ParserEdital:
         ("arrolamento", r"\barrolament"),
     )
 
-    def _onus(self, ctx: _Contexto) -> list[Achado]:
+    def _onus(self, ctx: Contexto) -> list[Achado]:
         encontrados: list[str] = []
         evidencias: list[str] = []
         for rotulo, padrao in self._TERMOS_ONUS:
@@ -549,7 +551,7 @@ class ParserEdital:
         ("taxa_incendio", r"taxa\s+de\s+incendio"),
     )
 
-    def _debitos(self, ctx: _Contexto) -> list[Achado]:
+    def _debitos(self, ctx: Contexto) -> list[Achado]:
         achados: list[Achado] = []
         rotulos: list[str] = []
         evidencias: list[str] = []
@@ -585,7 +587,7 @@ class ParserEdital:
             )
         return achados
 
-    def _sub_rogacao(self, ctx: _Contexto) -> list[Achado]:
+    def _sub_rogacao(self, ctx: Contexto) -> list[Achado]:
         """O edital diz que o debito tributario sai do preco ou fica com quem arremata?
 
         Relatamos o que esta escrito, com o trecho literal. Nao emitimos parecer:
@@ -638,7 +640,7 @@ class ParserEdital:
         ("financiamento", r"\bfinanciament"),
     )
 
-    def _formas_pagamento(self, ctx: _Contexto) -> list[Achado]:
+    def _formas_pagamento(self, ctx: Contexto) -> list[Achado]:
         formas = [
             rotulo for rotulo, padrao in self._FORMAS if _buscar(ctx, padrao)
         ]
@@ -663,7 +665,7 @@ class ParserEdital:
         ("nao_vistoriado", r"nao\s+(?:foi\s+)?vistoriad"),
     )
 
-    def _veiculo(self, ctx: _Contexto) -> list[Achado]:
+    def _veiculo(self, ctx: Contexto) -> list[Achado]:
         condicoes: list[str] = []
         evidencias: list[str] = []
         for rotulo, padrao in self._CONDICAO_VEICULO:

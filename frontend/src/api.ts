@@ -1,8 +1,10 @@
 /** Cliente HTTP da API. Um lugar só para token, erro e montagem de query. */
 
 import type {
+  Agenda,
   Alerta,
   Facetas,
+  FiltroAgenda,
   FiltroBusca,
   FonteSaude,
   GeoFeicao,
@@ -10,6 +12,7 @@ import type {
   LoteDetalhe,
   LoteResumo,
   PaginaLotes,
+  PaginaPublicacoes,
   Simulacao,
   Usuario,
 } from "./tipos";
@@ -117,6 +120,13 @@ export const api = {
 
   geo: (filtros: { uf?: string[]; tipo_bem?: string[] } = {}) =>
     pedir<{ type: string; features: GeoFeicao[] }>(`/geo/lotes${montarQuery(filtros)}`),
+
+  agenda: (filtros: FiltroAgenda = {}) =>
+    pedir<Agenda>(`/agenda${montarQuery(filtros as Record<string, unknown>)}`),
+  urlIcsAgenda: (filtros: FiltroAgenda = {}) =>
+    `${BASE}/agenda.ics${montarQuery(filtros as Record<string, unknown>)}`,
+  publicacoes: (filtros: Record<string, unknown> = {}) =>
+    pedir<PaginaPublicacoes>(`/diarios/publicacoes${montarQuery(filtros)}`),
 
   calendario: (filtros: Record<string, unknown> = {}) =>
     pedir<import("./tipos").Evento[]>(`/calendario${montarQuery(filtros)}`),

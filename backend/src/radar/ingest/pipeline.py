@@ -17,10 +17,19 @@ from sqlalchemy.orm import Session
 
 from radar.calendario.eventos import sincronizar_eventos
 from radar.collectors.base import Conector, listar, obter
-from radar.collectors.dto import LeiloeiroBruto, LoteBruto, PracaBruta
+from radar.collectors.dto import LeiloeiroBruto, LoteBruto, PracaBruta, PublicacaoBruta
 from radar.collectors.http import ErroColeta, EstruturaInesperada, Fetcher, RobotsBloqueado
 from radar.config import Settings, get_settings
+from radar.diarios.deteccao import (
+    LeilaoDetectado,
+    achados_da_deteccao,
+    detectar_leilao,
+    para_lote_bruto,
+    uf_da_secao_judiciaria,
+)
 from radar.enums import (
+    EsferaJustica,
+    MetodoExtracao,
     StatusColeta,
     StatusLeiloeiro,
     StatusPraca,
@@ -31,6 +40,7 @@ from radar.ingest.dedup import localizar_existente, mesclar
 from radar.ingest.fila import (
     TOPICO_LEILOEIROS,
     TOPICO_LOTES,
+    TOPICO_PUBLICACOES,
     FilaIngestao,
     Mensagem,
     criar_fila,
@@ -38,6 +48,7 @@ from radar.ingest.fila import (
 from radar.ingest.geocode import Geocodificador, GeocodificadorMunicipio
 from radar.ingest.normalizador import UF_POR_TRIBUNAL, normalizar
 from radar.models import (
+    CampoExtraido,
     Comarca,
     Documento,
     ExecucaoColeta,
@@ -46,14 +57,18 @@ from radar.models import (
     Lote,
     Praca,
     Processo,
+    PublicacaoDiario,
     Tribunal,
 )
-from radar.normalizacao import limpar_espacos, normalizar_texto, slugify
+from radar.normalizacao import limpar_espacos, normalizar_texto, remover_cpf, slugify
 
 logger = logging.getLogger(__name__)
 
 PRIORIDADE_FONTE = {
     TipoFonte.TRIBUNAL: 3,
+    # O diario e publicacao oficial do proprio juizo: manda sobre processo,
+    # comarca e vara, igual ao portal do tribunal.
+    TipoFonte.DIARIO_OFICIAL: 3,
     TipoFonte.PROCESSUAL: 2,
     TipoFonte.LEILOEIRO: 1,
     TipoFonte.JUNTA_COMERCIAL: 1,
@@ -69,6 +84,8 @@ class EstatisticasIngestao:
     inalterados: int = 0
     erros: int = 0
     remarcacoes: int = 0
+    publicacoes_lidas: int = 0
+    publicacoes_com_leilao: int = 0
     avisos: list[str] = field(default_factory=list)
 
     def somar(self, outro: EstatisticasIngestao) -> None:
@@ -78,6 +95,8 @@ class EstatisticasIngestao:
         self.inalterados += outro.inalterados
         self.erros += outro.erros
         self.remarcacoes += outro.remarcacoes
+        self.publicacoes_lidas += outro.publicacoes_lidas
+        self.publicacoes_com_leilao += outro.publicacoes_com_leilao
         self.avisos.extend(outro.avisos)
 
 
@@ -141,8 +160,12 @@ def executar_coleta(
             fila.publicar(Mensagem(TOPICO_LOTES, _serializar_lote(lote)))
         for leiloeiro in resultado.leiloeiros:
             fila.publicar(Mensagem(TOPICO_LEILOEIROS, _serializar_leiloeiro(leiloeiro)))
+        for publicacao in resultado.publicacoes:
+            fila.publicar(Mensagem(TOPICO_PUBLICACOES, _serializar_publicacao(publicacao)))
 
-        execucao.itens_encontrados = len(resultado.lotes) + len(resultado.leiloeiros)
+        execucao.itens_encontrados = (
+            len(resultado.lotes) + len(resultado.leiloeiros) + len(resultado.publicacoes)
+        )
         execucao.status = (
             StatusColeta.PARCIAL if resultado.avisos else StatusColeta.SUCESSO
         )
@@ -150,6 +173,7 @@ def executar_coleta(
             "paginas": resultado.paginas_visitadas,
             "lotes": len(resultado.lotes),
             "leiloeiros": len(resultado.leiloeiros),
+            "publicacoes": len(resultado.publicacoes),
             "avisos": resultado.avisos[:20],
         }
 
@@ -181,6 +205,24 @@ def _serializar_leiloeiro(leiloeiro: LeiloeiroBruto) -> dict:
     dados["status"] = str(leiloeiro.status)
     dados["junta"] = str(leiloeiro.junta) if leiloeiro.junta else None
     return dados
+
+
+def _serializar_publicacao(publicacao: PublicacaoBruta) -> dict:
+    dados = asdict(publicacao)
+    dados["esfera"] = str(publicacao.esfera)
+    for campo in ("data_publicacao", "data_divulgacao"):
+        if dados[campo] is not None:
+            dados[campo] = dados[campo].isoformat()
+    return dados
+
+
+def _desserializar_publicacao(dados: dict) -> PublicacaoBruta:
+    dados = dict(dados)
+    dados["esfera"] = EsferaJustica(dados.get("esfera") or EsferaJustica.DESCONHECIDA)
+    for campo in ("data_publicacao", "data_divulgacao"):
+        if dados.get(campo):
+            dados[campo] = datetime.fromisoformat(dados[campo])
+    return PublicacaoBruta(**dados)
 
 
 def _desserializar_lote(dados: dict) -> LoteBruto:
@@ -247,6 +289,24 @@ def processar_fila(
             stats.erros += 1
             stats.avisos.append(f"leiloeiro: {exc}")
             logger.exception("falha ao persistir leiloeiro")
+
+    for mensagem in fila.consumir(TOPICO_PUBLICACOES, limite=limite):
+        try:
+            resumo = persistir_publicacao(
+                sessao, mensagem.payload, settings, geocodificador
+            )
+            stats.publicacoes_lidas += 1
+            if resumo.virou_lote:
+                stats.publicacoes_com_leilao += 1
+                stats.encontrados += 1
+                stats.novos += int(resumo.criado)
+                stats.atualizados += int(not resumo.criado)
+                stats.remarcacoes += resumo.remarcacoes
+            fila.confirmar(mensagem)
+        except Exception as exc:
+            stats.erros += 1
+            stats.avisos.append(f"publicacao: {exc}")
+            logger.exception("falha ao persistir publicacao de diario")
 
     for mensagem in fila.consumir(TOPICO_LOTES, limite=limite):
         try:
@@ -431,6 +491,9 @@ def persistir_lote(
             numero_lote=bruto.numero_lote,
             numero_processo=norm.numero_processo,
             tipo_bem=bruto.tipo_bem,
+            natureza_bem=norm.classificacao.natureza,
+            zona_imovel=norm.classificacao.zona,
+            esfera=norm.esfera,
             titulo=bruto.titulo,
             descricao=norm.descricao,
             status=bruto.status,
@@ -484,6 +547,7 @@ def persistir_lote(
 
     _sincronizar_pracas(sessao, lote.leilao, norm.pracas)
     _sincronizar_documentos(sessao, lote, bruto)
+    _registrar_achados(sessao, lote, norm.classificacao.achados())
     sessao.flush()
 
     mudancas = sincronizar_eventos(sessao, lote, settings)
@@ -555,6 +619,123 @@ def _sincronizar_documentos(sessao: Session, lote: Lote, bruto: LoteBruto) -> No
             Documento(lote=lote, tipo=doc.tipo, url=doc.url, caminho_local=None)
         )
         urls.add(doc.url)
+
+
+def _registrar_achados(sessao: Session, lote: Lote, achados) -> None:
+    """Grava campo_extraido a partir de Achados. Revisao manual tem a ultima palavra."""
+    existentes = {c.nome: c for c in lote.campos}
+    for achado in achados:
+        campo = existentes.get(achado.nome)
+        if campo is None:
+            campo = CampoExtraido(lote=lote, nome=achado.nome)
+            sessao.add(campo)
+            existentes[achado.nome] = campo
+        elif campo.metodo is MetodoExtracao.MANUAL:
+            continue
+        elif campo.confianca > achado.confianca:
+            # Nao rebaixa: um achado do edital (0,92) nao e substituido pelo
+            # mesmo campo lido do diario (0,60) so porque o diario veio depois.
+            continue
+        campo.valor_texto = achado.valor_texto
+        campo.valor_numerico = achado.valor_numerico
+        campo.valor_data = achado.valor_data
+        campo.valor_booleano = achado.valor_booleano
+        campo.confianca = achado.confianca
+        campo.metodo = achado.metodo
+        campo.evidencia = achado.evidencia
+        campo.revisao_necessaria = achado.revisao_necessaria
+
+
+# ---------------------------------------------------------------------------
+# Etapa 2b: publicacao de diario -> deteccao -> lote
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class ResumoPublicacao:
+    publicacao: PublicacaoDiario
+    detectado: LeilaoDetectado | None = None
+    lote: Lote | None = None
+    criado: bool = False
+    remarcacoes: int = 0
+
+    @property
+    def virou_lote(self) -> bool:
+        return self.lote is not None
+
+
+def persistir_publicacao(
+    sessao: Session,
+    dados: dict,
+    settings: Settings | None = None,
+    geocodificador: Geocodificador | None = None,
+) -> ResumoPublicacao:
+    """Grava a publicacao, roda a deteccao e, se for leilao, cria/atualiza o lote.
+
+    As publicacoes que NAO sao leilao tambem ficam gravadas. Sem elas nao da para
+    medir falso negativo do detector -- e o unico jeito de descobrir que o
+    limiar esta alto demais e olhar o que ficou de fora.
+    """
+    settings = settings or get_settings()
+    bruta = _desserializar_publicacao(dados)
+
+    detectado = detectar_leilao(bruta.texto, limiar=settings.diario_limiar_deteccao)
+    publicacao = sessao.scalar(
+        select(PublicacaoDiario).where(
+            PublicacaoDiario.diario_slug == bruta.diario_slug,
+            PublicacaoDiario.identificador == bruta.identificador,
+        )
+    )
+    if publicacao is None:
+        publicacao = PublicacaoDiario(
+            diario_slug=bruta.diario_slug, identificador=bruta.identificador
+        )
+        sessao.add(publicacao)
+
+    # LGPD (secao 11): CPF fora, texto truncado no recorte que sustenta a prova.
+    texto = (remover_cpf(limpar_espacos(bruta.texto)) or "")[
+        : settings.diario_max_caracteres_texto
+    ]
+    publicacao.diario_nome = bruta.diario_nome
+    publicacao.esfera = bruta.esfera
+    publicacao.tribunal_sigla = bruta.tribunal_sigla
+    publicacao.uf = bruta.uf or uf_da_secao_judiciaria(bruta.texto)
+    publicacao.caderno = bruta.caderno
+    publicacao.numero_edicao = bruta.numero_edicao
+    publicacao.data_publicacao = bruta.data_publicacao
+    publicacao.data_divulgacao = bruta.data_divulgacao
+    publicacao.numero_processo = bruta.numero_processo
+    publicacao.orgao = bruta.orgao
+    publicacao.municipio = bruta.municipio
+    publicacao.texto = texto
+    publicacao.fonte_slug = bruta.fonte_slug
+    publicacao.fonte_url = bruta.fonte_url
+    publicacao.coletado_em = datetime.now(UTC)
+    publicacao.detectado_como_leilao = detectado is not None
+    publicacao.confianca_deteccao = detectado.confianca if detectado else 0.0
+    publicacao.termos_deteccao = list(detectado.termos[:12]) if detectado else []
+    publicacao.evidencia = detectado.evidencia_principal if detectado else None
+    publicacao.revisao_necessaria = detectado.revisao_necessaria if detectado else False
+    publicacao.versao_detector = detectado.versao if detectado else None
+    sessao.flush()
+
+    resumo = ResumoPublicacao(publicacao=publicacao, detectado=detectado)
+    if detectado is None:
+        return resumo
+
+    bruto = para_lote_bruto(
+        bruta, detectado, max_descricao=settings.diario_max_caracteres_texto
+    )
+    norm = normalizar(bruto, geocodificador, classificacao=detectado.classificacao)
+    lote, criado, _, remarcacoes = persistir_lote(sessao, norm, settings)
+    _registrar_achados(sessao, lote, achados_da_deteccao(detectado))
+    publicacao.lote_id = lote.id
+    sessao.flush()
+
+    resumo.lote = lote
+    resumo.criado = criado
+    resumo.remarcacoes = remarcacoes
+    return resumo
 
 
 # ---------------------------------------------------------------------------

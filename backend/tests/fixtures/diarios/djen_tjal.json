@@ -1,0 +1,39 @@
+{
+  "status": "success",
+  "message": "Consulta realizada com sucesso",
+  "count": 3,
+  "items": [
+    {
+      "id": 48213771,
+      "siglaTribunal": "TJAL",
+      "tipoComunicacao": "Edital",
+      "nomeOrgao": "3ª Vara Cível da Comarca de Maceió",
+      "numeroprocessocommascara": "0710702-95.2021.8.02.0001",
+      "data_disponibilizacao": "18/09/2026",
+      "numeroEdicao": "3421",
+      "link": "https://comunica.pje.jus.br/consulta/48213771",
+      "texto": "EDITAL DE LEILÃO JUDICIAL E INTIMAÇÃO. A Dra. Juíza de Direito da 3ª Vara Cível da Comarca de Maceió, Estado de Alagoas, FAZ SABER a quantos o presente edital virem ou dele conhecimento tiverem que, nos autos da execução nº 0710702-95.2021.8.02.0001, será levado a público leilão, na modalidade eletrônica, o BEM: apartamento residencial nº 302 do Edifício Jatobá, situado na Rua Exemplo de Souza, nº 100, bairro Farol, Maceió/AL, com área privativa de 68,50 m², matrícula nº 45.678 do 2º Ofício de Registro de Imóveis, avaliado em R$ 450.000,00. A 1ª praça será realizada em 12/03/2027, às 14h00; não havendo licitante, a 2ª praça ocorrerá em 26/03/2027, às 14h00, não sendo aceito lance inferior a 60% do valor da avaliação. Leiloeira pública oficial ANA PAULA FERREIRA LIMA, matrícula JUCEAL nº 12/2019. Comissão do leiloeiro de 5% a cargo do arrematante."
+    },
+    {
+      "id": 48213772,
+      "siglaTribunal": "TJAL",
+      "tipoComunicacao": "Edital",
+      "nomeOrgao": "Vara Única da Comarca de Arapiraca",
+      "numeroprocessocommascara": "0800321-12.2023.8.02.0058",
+      "data_disponibilizacao": "18/09/2026",
+      "numeroEdicao": "3421",
+      "link": "https://comunica.pje.jus.br/consulta/48213772",
+      "texto": "EDITAL DE 1ª E 2ª PRAÇA. O Juízo da Vara Única da Comarca de Arapiraca/AL, nos autos da execução fiscal nº 0800321-12.2023.8.02.0058, torna público que levará a hasta pública o BEM: imóvel rural denominado Sítio Boa Esperança, situado na zona rural do município de Arapiraca/AL, com área de 12,5 hectares, matrícula nº 7.112 do Registro de Imóveis, CCIR nº 901.234.567.890-1, avaliado em R$ 380.000,00. Primeira praça em 05/04/2027, às 10h00. Segunda praça em 19/04/2027, às 10h00."
+    },
+    {
+      "id": 48213773,
+      "siglaTribunal": "TJAL",
+      "tipoComunicacao": "Intimação",
+      "nomeOrgao": "1ª Vara de Família da Comarca de Maceió",
+      "numeroprocessocommascara": "0700999-11.2025.8.02.0001",
+      "data_disponibilizacao": "18/09/2026",
+      "link": "https://comunica.pje.jus.br/consulta/48213773",
+      "texto": "INTIMAÇÃO. Ficam as partes intimadas do despacho de fls. 210, para que se manifestem no prazo de 15 (quinze) dias sobre os documentos juntados, sob pena de preclusão. Nada mais havendo, cumpra-se na forma da lei."
+    }
+  ]
+}

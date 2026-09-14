@@ -1,6 +1,16 @@
 # Arquitetura
 
-## Por que duas camadas de coleta
+## Por que três camadas de coleta
+
+**Diário da Justiça** → quem decretou o leilão e quando ele acontece, em fonte
+oficial, muitas vezes antes de qualquer site publicar. **Tribunais e Juntas
+Comerciais** → quem pode leiloar. **Sites dos leiloeiros** → o detalhe do bem:
+foto, descrição, condições.
+
+As três se encontram na deduplicação: o mesmo processo visto no diário e no site
+do leiloeiro vira um lote só, com o que cada fonte sabe melhor.
+
+## Por que duas camadas de cadastro e oferta
 
 Os tribunais e as Juntas Comerciais dizem **quem** pode leiloar; os sites dos
 leiloeiros dizem **o que** e **quando** está sendo leiloado. Nenhuma das duas
@@ -17,6 +27,26 @@ não com um palpite feito na mesa.
 ```
 coletor → fila → worker de ingestão → extração → análise → API
 ```
+
+O diário entra pelo mesmo trilho, com uma etapa a mais antes da normalização:
+
+```
+conector do diário → PublicacaoBruta → fila
+                                        ↓
+                      detectar_leilao (confiança + trechos)
+                                        ↓
+                      classificar_bem (móvel/imóvel, rural/urbano)
+                                        ↓
+                      LoteBruto → normalizar → deduplicar → persistir
+```
+
+A detecção roda na **ingestão**, não no conector: o conector só baixa e recorta,
+e deduzir é trabalho de `radar.diarios`. O ganho prático é que o mesmo detector
+serve a qualquer diário, e mexer no limiar não encosta em nenhum conector.
+
+Publicação que não passa no limiar **não some**: fica gravada em
+`publicacao_diario` com `detectado_como_leilao = false`. Sem isso, não haveria
+como descobrir que o limiar está engolindo leilão de verdade.
 
 A fila existe para desacoplar coleta de processamento. O coletor precisa
 terminar rápido e não perder o que já baixou; o worker faz o trabalho caro
@@ -122,6 +152,31 @@ Dois `TypeDecorator` merecem nota, porque ambos corrigem bugs silenciosos:
   alerta indevido.
 - `EnumTexto` reconstrói o membro do enum na leitura. Sem ele a anotação
   `Mapped[StatusEvento]` mente e comparações com `is` falham em silêncio.
+
+## Dois eixos de classificação do bem
+
+A agenda pedia "móveis e imóveis, rurais e urbanos". Esses dois eixos **não** são
+derivados de `TipoBem` (IMOVEL/VEICULO/OUTRO): lá, um trator, um rebanho e uma
+joia caem todos em OUTRO, e OUTRO não diz se é móvel.
+
+Então `Lote` tem colunas próprias, `natureza_bem` e `zona_imovel`, preenchidas
+por `diarios/classificacao.py` — tabela de termos com peso, casando sobre o texto
+sem acento, com a evidência recortada do texto **original**.
+
+Três decisões que mudam o resultado:
+
+- **Zona só se pergunta de imóvel.** Deixar o eixo rodar sobre móvel faria
+  "trator na Fazenda Boa Vista" virar imóvel rural.
+- **Termo locativo vale menos.** "Fazenda" depois de "localizado na" é o lugar
+  do bem, não o bem. Sem esse desconto, "fazenda" (0,90) empatava com "máquina"
+  (0,82) e o trator saía com natureza indefinida — dúvida inventada pela regra.
+- **Empate técnico é `INDEFINIDA`.** Diferença menor que 0,15 entre os dois lados
+  não é conhecimento: vira revisão, com as duas frases lado a lado.
+
+A classificação roda para **todo** lote, não só os do diário — em `normalizar`,
+sobre título, descrição, endereço e bairro. Quem vem do diário chega com a
+classificação pronta, feita sobre o trecho do bem, que é mais preciso que a
+publicação inteira (o endereço do fórum no rodapé puxaria tudo para "urbano").
 
 ## Geocodificação
 
